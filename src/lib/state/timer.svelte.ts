@@ -81,12 +81,9 @@ class TimerStore {
 
   private recalcElapsed() {
     if (!this.current) return;
-    if (this.current.is_paused && this.current.paused_at) {
-      const pausedMs =
-        new Date(this.current.paused_at).getTime() -
-        new Date(this.current.started_at).getTime();
-      this.elapsedSeconds =
-        this.current.accumulated_secs + Math.floor(pausedMs / 1000);
+    if (this.current.is_paused) {
+      // accumulated_secs already includes all elapsed time up to pause
+      this.elapsedSeconds = this.current.accumulated_secs;
     } else {
       const nowMs =
         Date.now() - new Date(this.current.started_at).getTime();

@@ -1,8 +1,16 @@
 use crate::jira::client::JiraClient;
 use crate::jira::types::{JiraIssue, JiraUser};
 use crate::state::AppState;
+use chrono::DateTime;
 use serde::{Deserialize, Serialize};
 use tauri::State;
+
+/// Convert any date string to Jira format: "2021-01-17T12:34:00.000+0000"
+fn format_for_jira(date_str: &str) -> Result<String, String> {
+    let dt = DateTime::parse_from_rfc3339(date_str)
+        .map_err(|e| format!("Invalid date '{}': {}", date_str, e))?;
+    Ok(dt.format("%Y-%m-%dT%H:%M:%S%.3f%z").to_string())
+}
 
 fn get_client(state: &AppState) -> Result<JiraClient, String> {
     let config = state
@@ -89,14 +97,8 @@ pub async fn jira_push_worklog(
         return Err("Worklog already synced".to_string());
     }
 
-    // Jira expects started in format: "2021-01-17T12:34:00.000+0000"
-    let started_jira = if started_at.contains('+') || started_at.ends_with('Z') {
-        started_at.clone()
-    } else if started_at.contains('T') {
-        format!("{}+0000", started_at)
-    } else {
-        format!("{}T00:00:00.000+0000", started_at)
-    };
+    // Jira expects: "2021-01-17T12:34:00.000+0000"
+    let started_jira = format_for_jira(&started_at)?;
 
     match client
         .add_worklog(&issue_key, duration, &started_jira, &description)
@@ -153,13 +155,7 @@ pub async fn jira_push_all_pending(
         .map_err(|e| e.to_string())?;
 
         if let Some((issue_key, started_at, duration, description)) = row {
-            let started_jira = if started_at.contains('+') || started_at.ends_with('Z') {
-                started_at.clone()
-            } else if started_at.contains('T') {
-                format!("{}+0000", started_at)
-            } else {
-                format!("{}T00:00:00.000+0000", started_at)
-            };
+            let started_jira = format_for_jira(&started_at)?;
 
             match client
                 .add_worklog(&issue_key, duration, &started_jira, &description)
