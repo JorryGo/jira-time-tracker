@@ -4,22 +4,55 @@
   import WorklogEditModal from "../components/WorklogEditModal.svelte";
   import AddWorklogModal from "../components/AddWorklogModal.svelte";
   import { formatDurationShort, formatDateTime } from "../lib/utils/format";
-  import type { Worklog } from "../lib/types/worklog";
+  import type { Worklog, WorklogFilter } from "../lib/types/worklog";
 
   let statusFilter = $state("all");
+  let selectedDate = $state(new Date().toISOString().split("T")[0]);
   let editingWorklog = $state<Worklog | null>(null);
   let showAddModal = $state(false);
   let pushingAll = $state(false);
   let pushingSelected = $state(false);
   let toast = $state("");
 
+  let totalSeconds = $derived(
+    worklogsStore.items.reduce((sum, wl) => sum + wl.duration_seconds, 0)
+  );
+
+  function buildFilter(): WorklogFilter {
+    const filter: WorklogFilter = {};
+    const startOfDay = new Date(selectedDate + "T00:00:00");
+    const nextDay = new Date(startOfDay);
+    nextDay.setDate(nextDay.getDate() + 1);
+    filter.date_from = startOfDay.toISOString();
+    filter.date_to = nextDay.toISOString();
+    if (statusFilter !== "all") {
+      filter.sync_status = statusFilter;
+    }
+    return filter;
+  }
+
+  async function refreshWorklogs() {
+    await worklogsStore.refresh(buildFilter());
+  }
+
   onMount(() => {
-    worklogsStore.refresh();
+    refreshWorklogs();
   });
 
   async function handleFilterChange() {
-    const filter = statusFilter === "all" ? undefined : { sync_status: statusFilter };
-    await worklogsStore.refresh(filter);
+    await refreshWorklogs();
+  }
+
+  function changeDate(offset: number) {
+    const d = new Date(selectedDate + "T00:00:00");
+    d.setDate(d.getDate() + offset);
+    selectedDate = d.toISOString().split("T")[0];
+    refreshWorklogs();
+  }
+
+  function goToToday() {
+    selectedDate = new Date().toISOString().split("T")[0];
+    refreshWorklogs();
   }
 
   async function handleDelete(id: number) {
@@ -66,13 +99,26 @@
 
 <div class="worklogs-view">
   <div class="toolbar">
-    <select bind:value={statusFilter} onchange={handleFilterChange}>
-      <option value="all">All</option>
-      <option value="pending">Pending</option>
-      <option value="synced">Synced</option>
-      <option value="error">Error</option>
-    </select>
+    <div class="toolbar-left">
+      <button class="btn btn-sm btn-nav" onclick={() => changeDate(-1)} title="Previous day">&larr;</button>
+      <input
+        type="date"
+        class="date-picker"
+        bind:value={selectedDate}
+        onchange={handleFilterChange}
+      />
+      <button class="btn btn-sm btn-nav" onclick={() => changeDate(1)} title="Next day">&rarr;</button>
+      {#if selectedDate !== new Date().toISOString().split("T")[0]}
+        <button class="btn btn-sm" onclick={goToToday}>Today</button>
+      {/if}
+    </div>
     <div class="toolbar-right">
+      <select bind:value={statusFilter} onchange={handleFilterChange}>
+        <option value="all">All</option>
+        <option value="pending">Pending</option>
+        <option value="synced">Synced</option>
+        <option value="error">Error</option>
+      </select>
       <button class="btn btn-sm" onclick={() => (showAddModal = true)}>+ Add</button>
       {#if worklogsStore.selectedCount > 0}
         <button
@@ -93,6 +139,11 @@
         </button>
       {/if}
     </div>
+  </div>
+
+  <div class="summary-bar">
+    <span class="total-label">Total:</span>
+    <span class="total-value">{formatDurationShort(totalSeconds)}</span>
   </div>
 
   {#if toast}
@@ -171,10 +222,56 @@
     font-size: 11px;
   }
 
+  .toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
   .toolbar-right {
     display: flex;
     gap: 6px;
     margin-left: auto;
+    align-items: center;
+  }
+
+  .btn-nav {
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .date-picker {
+    padding: 3px 6px;
+    font-size: 11px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    width: 120px;
+  }
+
+  .summary-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+
+  .total-label {
+    color: var(--text-secondary);
+  }
+
+  .total-value {
+    font-weight: 600;
   }
 
   .btn {

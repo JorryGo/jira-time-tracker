@@ -20,9 +20,7 @@ pub struct Worklog {
 pub struct WorklogFilter {
     pub issue_key: Option<String>,
     pub sync_status: Option<String>,
-    #[allow(dead_code)]
     pub date_from: Option<String>,
-    #[allow(dead_code)]
     pub date_to: Option<String>,
 }
 
@@ -34,51 +32,41 @@ pub async fn get_worklogs(
     // Build query dynamically based on filter
     // Since sqlx doesn't support dynamic queries well with compile-time checking,
     // we use query_as with raw SQL
-    let worklogs: Vec<Worklog> = if let Some(ref f) = filter {
-        match (&f.sync_status, &f.issue_key) {
-            (Some(status), Some(key)) if status != "all" => {
-                sqlx::query_as::<_, Worklog>(
-                    "SELECT * FROM worklogs WHERE sync_status = ?1 AND issue_key = ?2 ORDER BY started_at DESC",
-                )
-                .bind(status)
-                .bind(key)
-                .fetch_all(&state.db)
-                .await
-                .map_err(|e| e.to_string())?
-            }
-            (Some(status), None) if status != "all" => {
-                sqlx::query_as::<_, Worklog>(
-                    "SELECT * FROM worklogs WHERE sync_status = ?1 ORDER BY started_at DESC",
-                )
-                .bind(status)
-                .fetch_all(&state.db)
-                .await
-                .map_err(|e| e.to_string())?
-            }
-            (_, Some(key)) => {
-                sqlx::query_as::<_, Worklog>(
-                    "SELECT * FROM worklogs WHERE issue_key = ?1 ORDER BY started_at DESC",
-                )
-                .bind(key)
-                .fetch_all(&state.db)
-                .await
-                .map_err(|e| e.to_string())?
-            }
-            _ => {
-                sqlx::query_as::<_, Worklog>(
-                    "SELECT * FROM worklogs ORDER BY started_at DESC",
-                )
-                .fetch_all(&state.db)
-                .await
-                .map_err(|e| e.to_string())?
+    let mut sql = String::from("SELECT * FROM worklogs WHERE 1=1");
+    let mut binds: Vec<String> = Vec::new();
+
+    if let Some(ref f) = filter {
+        if let Some(ref status) = f.sync_status {
+            if status != "all" {
+                binds.push(status.clone());
+                sql.push_str(&format!(" AND sync_status = ?{}", binds.len()));
             }
         }
-    } else {
-        sqlx::query_as::<_, Worklog>("SELECT * FROM worklogs ORDER BY started_at DESC")
-            .fetch_all(&state.db)
-            .await
-            .map_err(|e| e.to_string())?
-    };
+        if let Some(ref key) = f.issue_key {
+            binds.push(key.clone());
+            sql.push_str(&format!(" AND issue_key = ?{}", binds.len()));
+        }
+        if let Some(ref date_from) = f.date_from {
+            binds.push(date_from.clone());
+            sql.push_str(&format!(" AND started_at >= ?{}", binds.len()));
+        }
+        if let Some(ref date_to) = f.date_to {
+            binds.push(date_to.clone());
+            sql.push_str(&format!(" AND started_at < ?{}", binds.len()));
+        }
+    }
+
+    sql.push_str(" ORDER BY started_at DESC");
+
+    let mut query = sqlx::query_as::<_, Worklog>(&sql);
+    for bind in &binds {
+        query = query.bind(bind);
+    }
+
+    let worklogs = query
+        .fetch_all(&state.db)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(worklogs)
 }

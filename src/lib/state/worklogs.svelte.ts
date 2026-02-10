@@ -6,6 +6,7 @@ class WorklogsStore {
   items = $state<Worklog[]>([]);
   isLoading = $state(false);
   selectedIds = $state<Set<number>>(new Set());
+  private lastFilter: WorklogFilter | undefined = undefined;
 
   get pendingCount(): number {
     return this.items.filter((w) => w.sync_status === "pending").length;
@@ -16,9 +17,12 @@ class WorklogsStore {
   }
 
   async refresh(filter?: WorklogFilter) {
+    if (filter !== undefined) {
+      this.lastFilter = filter;
+    }
     this.isLoading = true;
     try {
-      this.items = await cmd.getWorklogs(filter);
+      this.items = await cmd.getWorklogs(this.lastFilter);
     } finally {
       this.isLoading = false;
     }
