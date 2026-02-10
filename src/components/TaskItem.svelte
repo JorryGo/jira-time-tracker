@@ -1,8 +1,9 @@
 <script lang="ts">
   import type { JiraIssue } from "../lib/types/jira";
   import { timerStore } from "../lib/state/timer.svelte";
+  import { tasksStore } from "../lib/state/tasks.svelte";
 
-  let { issue, onAddManual }: { issue: JiraIssue; onAddManual: (issue: JiraIssue) => void } = $props();
+  let { issue, isPinned, onAddManual }: { issue: JiraIssue; isPinned: boolean; onAddManual: (issue: JiraIssue) => void } = $props();
 
   let isTimerOnThis = $derived(timerStore.current?.issue_key === issue.issue_key);
 
@@ -30,6 +31,14 @@
     <span class="task-summary">{issue.summary}</span>
   </div>
   <div class="task-actions">
+    <button
+      class="btn-icon btn-pin"
+      class:pinned={isPinned}
+      onclick={() => tasksStore.togglePin(issue.issue_key)}
+      title={isPinned ? "Unpin" : "Pin to top"}
+    >
+      {isPinned ? "\u{1F4CC}" : "\u{1F4CC}"}
+    </button>
     {#if isTimerOnThis}
       {#if timerStore.isRunning}
         <button class="btn-icon" onclick={handlePause} title="Pause">⏸</button>
@@ -126,5 +135,21 @@
 
   .btn-play {
     color: var(--success);
+  }
+
+  .btn-pin {
+    opacity: 0;
+    font-size: 10px;
+  }
+
+  .task-item:hover .btn-pin,
+  .btn-pin.pinned {
+    opacity: 1;
+  }
+
+  .btn-pin.pinned {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
   }
 </style>

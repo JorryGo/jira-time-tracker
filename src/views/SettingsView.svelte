@@ -1,5 +1,6 @@
 <script lang="ts">
   import { settingsStore } from "../lib/state/settings.svelte";
+  import { tasksStore } from "../lib/state/tasks.svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
 
   let baseUrl = $state(settingsStore.jiraBaseUrl);
@@ -54,6 +55,33 @@
   function handleResetJql() {
     jqlFilter = "assignee = currentUser() ORDER BY updated DESC";
   }
+
+  let newStatus = $state("");
+
+  function moveStatus(index: number, direction: -1 | 1) {
+    const arr = [...tasksStore.statusOrder];
+    const target = index + direction;
+    if (target < 0 || target >= arr.length) return;
+    [arr[index], arr[target]] = [arr[target], arr[index]];
+    tasksStore.saveStatusOrder(arr);
+  }
+
+  function removeStatus(index: number) {
+    const arr = tasksStore.statusOrder.filter((_, i) => i !== index);
+    tasksStore.saveStatusOrder(arr);
+  }
+
+  function addStatus() {
+    const name = newStatus.trim();
+    if (!name) return;
+    if (tasksStore.statusOrder.some((s) => s.toLowerCase() === name.toLowerCase())) return;
+    tasksStore.saveStatusOrder([...tasksStore.statusOrder, name]);
+    newStatus = "";
+  }
+
+  function resetStatusOrder() {
+    tasksStore.saveStatusOrder(["In Progress", "Reopened", "Ready for Develop"]);
+  }
 </script>
 
 <div class="settings-view">
@@ -96,6 +124,37 @@
       <button class="btn btn-primary" onclick={handleSaveJql} disabled={saving}>
         {saving ? "Saving..." : "Save Filter"}
       </button>
+    </div>
+  </section>
+
+  <section>
+    <h3>Status Sort Order</h3>
+    <p class="section-hint">Tasks are sorted by status in this order. Statuses not in the list appear at the bottom.</p>
+    <div class="status-list">
+      {#each tasksStore.statusOrder as status, i (status)}
+        <div class="status-row">
+          <span class="status-rank">{i + 1}.</span>
+          <span class="status-name">{status}</span>
+          <div class="status-actions">
+            <button class="btn-sm" onclick={() => moveStatus(i, -1)} disabled={i === 0} title="Move up">&uarr;</button>
+            <button class="btn-sm" onclick={() => moveStatus(i, 1)} disabled={i === tasksStore.statusOrder.length - 1} title="Move down">&darr;</button>
+            <button class="btn-sm btn-danger-sm" onclick={() => removeStatus(i)} title="Remove">&times;</button>
+          </div>
+        </div>
+      {/each}
+    </div>
+    <div class="add-status-row">
+      <input
+        type="text"
+        class="add-status-input"
+        placeholder="New status name..."
+        bind:value={newStatus}
+        onkeydown={(e) => e.key === "Enter" && addStatus()}
+      />
+      <button class="btn btn-secondary" onclick={addStatus}>Add</button>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick={resetStatusOrder}>Reset to Default</button>
     </div>
   </section>
 
@@ -222,5 +281,81 @@
     text-align: center;
     color: var(--text-secondary);
     font-size: 11px;
+  }
+
+  .section-hint {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+  }
+
+  .status-list {
+    margin-bottom: 8px;
+  }
+
+  .status-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .status-rank {
+    font-size: 11px;
+    color: var(--text-secondary);
+    width: 18px;
+    flex-shrink: 0;
+  }
+
+  .status-name {
+    flex: 1;
+    font-size: 12px;
+  }
+
+  .status-actions {
+    display: flex;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+
+  .btn-sm {
+    width: 22px;
+    height: 22px;
+    border-radius: 3px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+  }
+
+  .btn-sm:hover:not(:disabled) {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+
+  .btn-sm:disabled {
+    opacity: 0.3;
+  }
+
+  .btn-danger-sm:hover:not(:disabled) {
+    background: var(--danger);
+    border-color: var(--danger);
+  }
+
+  .add-status-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+
+  .add-status-input {
+    flex: 1;
+    font-size: 12px;
+    padding: 4px 8px;
   }
 </style>

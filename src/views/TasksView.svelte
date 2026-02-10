@@ -13,6 +13,7 @@
 
   onMount(async () => {
     await settingsStore.init();
+    await tasksStore.init();
     await timerStore.init();
     if (settingsStore.isConnected) {
       await tasksStore.refresh();
@@ -44,11 +45,12 @@
     </div>
   {:else}
     <div class="toolbar">
-      <span class="filter-label" title={settingsStore.jqlFilter}>
-        {settingsStore.jqlFilter.length > 35
-          ? settingsStore.jqlFilter.slice(0, 35) + "..."
-          : settingsStore.jqlFilter}
-      </span>
+      <input
+        type="text"
+        class="search-input"
+        placeholder="Search tasks..."
+        bind:value={tasksStore.searchQuery}
+      />
       <button class="btn-refresh" onclick={handleRefresh} disabled={tasksStore.isLoading}>
         {tasksStore.isLoading ? "..." : "↻"}
       </button>
@@ -59,8 +61,8 @@
     {/if}
 
     <div class="task-list">
-      {#each tasksStore.items as issue (issue.issue_key)}
-        <TaskItem {issue} onAddManual={handleAddManual} />
+      {#each tasksStore.sortedItems as issue (issue.issue_key)}
+        <TaskItem {issue} isPinned={tasksStore.pinnedKeys.has(issue.issue_key)} onAddManual={handleAddManual} />
       {:else}
         {#if !tasksStore.isLoading}
           <div class="empty-state">
@@ -91,13 +93,24 @@
     gap: 8px;
   }
 
-  .filter-label {
-    font-size: 11px;
-    color: var(--text-secondary);
+  .search-input {
     flex: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    font-size: 12px;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    color: var(--text);
+    min-width: 0;
+  }
+
+  .search-input::placeholder {
+    color: var(--text-secondary);
+  }
+
+  .search-input:focus {
+    outline: none;
+    border-color: var(--accent);
   }
 
   .btn-refresh {
