@@ -1,0 +1,112 @@
+use base64::{engine::general_purpose, Engine as _};
+use reqwest::Client;
+
+use super::types::*;
+
+pub struct JiraClient {
+    client: Client,
+    base_url: String,
+    auth_header: String,
+}
+
+impl JiraClient {
+    pub fn new(base_url: &str, email: &str, api_token: &str) -> Self {
+        let credentials = format!("{}:{}", email, api_token);
+        let auth_header = format!("Basic {}", general_purpose::STANDARD.encode(credentials));
+        Self {
+            client: Client::new(),
+            base_url: base_url.trim_end_matches('/').to_string(),
+            auth_header,
+        }
+    }
+
+    pub async fn get_myself(&self) -> Result<JiraUser, String> {
+        self.client
+            .get(format!("{}/rest/api/3/myself", self.base_url))
+            .header("Authorization", &self.auth_header)
+            .header("Accept", "application/json")
+            .send()
+            .await
+            .map_err(|e| format!("Request failed: {}", e))?
+            .error_for_status()
+            .map_err(|e| format!("Jira API error: {}", e))?
+            .json::<JiraUser>()
+            .await
+            .map_err(|e| format!("Failed to parse response: {}", e))
+    }
+
+    pub async fn search_issues(
+        &self,
+        jql: &str,
+        max_results: u32,
+    ) -> Result<Vec<JiraIssue>, String> {
+        let body = serde_json::json!({
+            "jql": jql,
+            "fields": ["summary", "status", "issuetype", "project"],
+            "maxResults": max_results
+        });
+
+        let raw = self
+            .client
+            .post(format!("{}/rest/api/3/search/jql", self.base_url))
+            .header("Authorization", &self.auth_header)
+            .header("Accept", "application/json")
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| format!("Request failed: {}", e))?
+            .error_for_status()
+            .map_err(|e| format!("Jira API error: {}", e))?
+            .text()
+            .await
+            .map_err(|e| format!("Failed to read response: {}", e))?;
+
+        let resp: JiraSearchResponse = serde_json::from_str(&raw)
+            .map_err(|e| format!("Failed to parse response: {}. Body preview: {}", e, &raw[..raw.len().min(500)]))?;
+
+        Ok(resp.issues.into_iter().map(JiraIssue::from).collect())
+    }
+
+    pub async fn add_worklog(
+        &self,
+        issue_key: &str,
+        time_spent_seconds: i64,
+        started: &str,
+        comment: &str,
+    ) -> Result<JiraWorklogResponse, String> {
+        let body = serde_json::json!({
+            "timeSpentSeconds": time_spent_seconds,
+            "started": started,
+            "comment": {
+                "type": "doc",
+                "version": 1,
+                "content": [{
+                    "type": "paragraph",
+                    "content": [{
+                        "type": "text",
+                        "text": if comment.is_empty() { "Time logged via Jira Time Tracker" } else { comment }
+                    }]
+                }]
+            }
+        });
+
+        self.client
+            .post(format!(
+                "{}/rest/api/3/issue/{}/worklog",
+                self.base_url, issue_key
+            ))
+            .header("Authorization", &self.auth_header)
+            .header("Accept", "application/json")
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| format!("Request failed: {}", e))?
+            .error_for_status()
+            .map_err(|e| format!("Jira API error: {}", e))?
+            .json::<JiraWorklogResponse>()
+            .await
+            .map_err(|e| format!("Failed to parse response: {}", e))
+    }
+}
