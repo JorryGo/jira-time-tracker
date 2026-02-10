@@ -2,6 +2,7 @@
   import type { JiraIssue } from "../lib/types/jira";
   import { timerStore } from "../lib/state/timer.svelte";
   import { tasksStore } from "../lib/state/tasks.svelte";
+  import pinIcon from "../assets/pin.png";
 
   let { issue, isPinned, onAddManual }: { issue: JiraIssue; isPinned: boolean; onAddManual: (issue: JiraIssue) => void } = $props();
 
@@ -37,7 +38,7 @@
       onclick={() => tasksStore.togglePin(issue.issue_key)}
       title={isPinned ? "Unpin" : "Pin to top"}
     >
-      {isPinned ? "\u{1F4CC}" : "\u{1F4CC}"}
+      <img class="pin-icon" src={pinIcon} alt="pin" />
     </button>
     {#if isTimerOnThis}
       {#if timerStore.isRunning}
@@ -137,9 +138,14 @@
     color: var(--success);
   }
 
+  .pin-icon {
+    width: 14px;
+    height: 14px;
+    object-fit: contain;
+  }
+
   .btn-pin {
     opacity: 0;
-    font-size: 10px;
   }
 
   .task-item:hover .btn-pin,
