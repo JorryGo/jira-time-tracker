@@ -219,12 +219,7 @@ pub async fn timer_update_tray(
     display_text: String,
 ) -> Result<(), String> {
     if let Some(tray) = app_handle.tray_by_id("main-tray") {
-        let title = if display_text.is_empty() {
-            None
-        } else {
-            Some(display_text.as_str())
-        };
-        tray.set_title(title).map_err(|e| e.to_string())?;
+        tray.set_title(Some(&display_text)).map_err(|e| e.to_string())?;
     }
     Ok(())
 }
