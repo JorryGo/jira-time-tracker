@@ -8,13 +8,25 @@
   import { openUrl } from "@tauri-apps/plugin-opener";
   import type { Worklog, WorklogFilter } from "../lib/types/worklog";
 
+  function toLocalDateStr(date: Date): string {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${y}-${m}-${d}`;
+  }
+
   let statusFilter = $state("all");
-  let selectedDate = $state(new Date().toISOString().split("T")[0]);
+  let selectedDate = $state(toLocalDateStr(new Date()));
   let editingWorklog = $state<Worklog | null>(null);
   let showAddModal = $state(false);
   let pushingAll = $state(false);
   let pushingSelected = $state(false);
   let toast = $state("");
+
+  let displayDate = $derived.by(() => {
+    const [y, m, d] = selectedDate.split("-");
+    return `${d}/${m}/${y}`;
+  });
 
   let totalSeconds = $derived(
     worklogsStore.items.reduce((sum, wl) => sum + wl.duration_seconds, 0)
@@ -46,14 +58,14 @@
   }
 
   function changeDate(offset: number) {
-    const d = new Date(selectedDate + "T00:00:00");
+    const d = new Date(selectedDate + "T12:00:00");
     d.setDate(d.getDate() + offset);
-    selectedDate = d.toISOString().split("T")[0];
+    selectedDate = toLocalDateStr(d);
     refreshWorklogs();
   }
 
   function goToToday() {
-    selectedDate = new Date().toISOString().split("T")[0];
+    selectedDate = toLocalDateStr(new Date());
     refreshWorklogs();
   }
 
@@ -100,21 +112,25 @@
 </script>
 
 <div class="worklogs-view">
-  <div class="toolbar">
-    <div class="toolbar-left">
-      <button class="btn btn-sm btn-nav" onclick={() => changeDate(-1)} title="Previous day">&larr;</button>
+  <div class="date-bar">
+    <button class="btn btn-sm btn-nav" onclick={() => changeDate(-1)} title="Previous day">&#8592;</button>
+    <div class="date-label-wrap">
+      <span class="date-label">{displayDate}</span>
       <input
         type="date"
-        class="date-picker"
+        class="date-overlay"
         bind:value={selectedDate}
         onchange={handleFilterChange}
       />
-      <button class="btn btn-sm btn-nav" onclick={() => changeDate(1)} title="Next day">&rarr;</button>
-      {#if selectedDate !== new Date().toISOString().split("T")[0]}
-        <button class="btn btn-sm" onclick={goToToday}>Today</button>
-      {/if}
     </div>
-    <div class="toolbar-right">
+    <button class="btn btn-sm btn-nav" onclick={() => changeDate(1)} title="Next day">&#8594;</button>
+    {#if selectedDate !== toLocalDateStr(new Date())}
+      <button class="btn btn-sm date-today" onclick={goToToday}>Today</button>
+    {/if}
+  </div>
+
+  <div class="toolbar">
+    <div class="toolbar-left">
       <select bind:value={statusFilter} onchange={handleFilterChange}>
         <option value="all">All</option>
         <option value="pending">Pending</option>
@@ -122,6 +138,8 @@
         <option value="error">Error</option>
       </select>
       <button class="btn btn-sm" onclick={() => (showAddModal = true)}>+ Add</button>
+    </div>
+    <div class="toolbar-right">
       {#if worklogsStore.selectedCount > 0}
         <button
           class="btn btn-sm btn-primary"
@@ -213,10 +231,51 @@
     height: 100%;
   }
 
+  .date-bar {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border);
+    gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .date-today {
+    position: absolute;
+    right: 12px;
+  }
+
+  .date-label-wrap {
+    position: relative;
+    cursor: pointer;
+  }
+
+  .date-label {
+    font-size: 13px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+  }
+
+  .date-label-wrap:hover .date-label {
+    background: var(--bg-secondary);
+  }
+
+  .date-overlay {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+  }
+
   .toolbar {
     display: flex;
     align-items: center;
-    padding: 8px 12px;
+    padding: 6px 12px;
     border-bottom: 1px solid var(--border);
     gap: 8px;
     flex-shrink: 0;
@@ -230,7 +289,7 @@
   .toolbar-left {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
   }
 
   .toolbar-right {
@@ -249,15 +308,6 @@
     justify-content: center;
     font-size: 14px;
     font-weight: 600;
-  }
-
-  .date-picker {
-    padding: 3px 6px;
-    font-size: 11px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--bg-secondary);
-    width: 120px;
   }
 
   .summary-bar {
