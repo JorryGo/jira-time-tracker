@@ -26,7 +26,12 @@ class TimerStore {
     if (state) {
       this.current = state;
       this.recalcElapsed();
-      if (!state.is_paused) this.startTicking();
+      if (state.is_paused) {
+        cmd.timerSetTrayIcon("paused");
+      } else {
+        cmd.timerSetTrayIcon("working");
+        this.startTicking();
+      }
     }
   }
 
@@ -38,6 +43,7 @@ class TimerStore {
     this.issueSummary = summary;
     this.elapsedSeconds = 0;
     this.startTicking();
+    cmd.timerSetTrayIcon("working");
   }
 
   async pause() {
@@ -45,11 +51,13 @@ class TimerStore {
     this.stopTicking();
     this.recalcElapsed();
     await cmd.timerUpdateTray(`${this.current.issue_key} ${formatDuration(this.elapsedSeconds)} ⏸`);
+    cmd.timerSetTrayIcon("paused");
   }
 
   async resume() {
     this.current = await cmd.timerResume();
     this.startTicking();
+    cmd.timerSetTrayIcon("working");
   }
 
   async stop() {
@@ -59,6 +67,7 @@ class TimerStore {
     this.elapsedSeconds = 0;
     this.stopTicking();
     await cmd.timerUpdateTray("");
+    cmd.timerSetTrayIcon("idle");
     return result;
   }
 

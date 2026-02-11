@@ -223,3 +223,20 @@ pub async fn timer_update_tray(
     }
     Ok(())
 }
+
+#[tauri::command]
+pub async fn timer_set_tray_icon(
+    app_handle: tauri::AppHandle,
+    icon_name: String,
+) -> Result<(), String> {
+    let icon_bytes: &[u8] = match icon_name.as_str() {
+        "working" => include_bytes!("../../icons/tray-working.png"),
+        "paused" => include_bytes!("../../icons/tray-paused.png"),
+        _ => include_bytes!("../../icons/tray-idle.png"),
+    };
+    let icon = tauri::image::Image::from_bytes(icon_bytes).map_err(|e| e.to_string())?;
+    if let Some(tray) = app_handle.tray_by_id("main-tray") {
+        tray.set_icon(Some(icon)).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}

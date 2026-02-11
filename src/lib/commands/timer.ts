@@ -25,3 +25,7 @@ export async function timerStop(): Promise<StoppedWorklog> {
 export async function timerUpdateTray(displayText: string): Promise<void> {
   return invoke("timer_update_tray", { displayText });
 }
+
+export async function timerSetTrayIcon(iconName: string): Promise<void> {
+  return invoke("timer_set_tray_icon", { iconName });
+}

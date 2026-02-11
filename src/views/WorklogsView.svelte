@@ -75,12 +75,21 @@
     refreshWorklogs();
   }
 
+  let confirmDeleteId = $state<number | null>(null);
+
   async function handleDelete(id: number) {
+    confirmDeleteId = id;
+  }
+
+  async function confirmDelete() {
+    if (confirmDeleteId === null) return;
     try {
-      await worklogsStore.remove(id);
+      await worklogsStore.remove(confirmDeleteId);
     } catch (e) {
       toast = String(e);
       setTimeout(() => (toast = ""), 3000);
+    } finally {
+      confirmDeleteId = null;
     }
   }
 
@@ -208,7 +217,7 @@
         </div>
         <div class="wl-actions">
           {#if wl.sync_status !== "synced"}
-            <button class="btn-icon-sm" onclick={() => (editingWorklog = wl)} title="Edit">✎</button>
+            <button class="btn-icon-sm btn-edit" onclick={() => (editingWorklog = wl)} title="Edit">✎</button>
             <button class="btn-icon-sm btn-danger" onclick={() => handleDelete(wl.id)} title="Delete">✕</button>
           {/if}
         </div>
@@ -228,6 +237,20 @@
 
 {#if showAddModal}
   <AddWorklogModal selectedDate={selectedDate} onClose={() => (showAddModal = false)} />
+{/if}
+
+{#if confirmDeleteId !== null}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="modal-overlay" onmousedown={() => (confirmDeleteId = null)}>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="confirm-dialog" onmousedown={(e) => e.stopPropagation()}>
+      <p>Delete this entry?</p>
+      <div class="confirm-actions">
+        <button class="btn btn-sm" onclick={() => (confirmDeleteId = null)}>Cancel</button>
+        <button class="btn btn-sm btn-danger" onclick={confirmDelete}>Delete</button>
+      </div>
+    </div>
+  </div>
 {/if}
 
 <style>
@@ -481,20 +504,65 @@
     justify-content: center;
   }
 
+  .btn-edit {
+    color: var(--accent);
+  }
+
   .btn-icon-sm:hover {
     background: var(--accent);
     color: white;
     border-color: var(--accent);
   }
 
+  .btn-danger {
+    color: var(--danger);
+  }
+
   .btn-danger:hover {
-    background: var(--danger);
-    border-color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 80%, transparent);
+    border-color: color-mix(in srgb, var(--danger) 80%, transparent);
+    color: white;
   }
 
   .empty-state {
     text-align: center;
     padding: 40px 16px;
     color: var(--text-secondary);
+  }
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+
+  .confirm-dialog {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    text-align: center;
+  }
+
+  .confirm-dialog p {
+    margin-bottom: 12px;
+    font-size: 13px;
+  }
+
+  .confirm-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+  }
+
+  .confirm-actions .btn-danger {
+    background: color-mix(in srgb, var(--danger) 80%, transparent);
+    color: white;
+    border-color: color-mix(in srgb, var(--danger) 80%, transparent);
   }
 </style>

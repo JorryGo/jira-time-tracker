@@ -32,6 +32,7 @@ pub fn run() {
             commands::timer::timer_stop,
             commands::timer::timer_get_state,
             commands::timer::timer_update_tray,
+            commands::timer::timer_set_tray_icon,
             commands::worklogs::get_worklogs,
             commands::worklogs::create_worklog,
             commands::worklogs::update_worklog,
@@ -73,7 +74,7 @@ pub fn run() {
 
             // Build tray icon
             let _tray = TrayIconBuilder::with_id("main-tray")
-                .icon(app.default_window_icon().unwrap().clone())
+                .icon(tauri::image::Image::from_bytes(include_bytes!("../icons/tray-idle.png")).unwrap())
                 .icon_as_template(true)
                 .tooltip("Jira Time Tracker")
                 .on_tray_icon_event(|tray, event| {
