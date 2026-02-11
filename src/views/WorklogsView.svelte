@@ -4,6 +4,8 @@
   import WorklogEditModal from "../components/WorklogEditModal.svelte";
   import AddWorklogModal from "../components/AddWorklogModal.svelte";
   import { formatDurationShort, formatDateTime } from "../lib/utils/format";
+  import { settingsStore } from "../lib/state/settings.svelte";
+  import { openUrl } from "@tauri-apps/plugin-opener";
   import type { Worklog, WorklogFilter } from "../lib/types/worklog";
 
   let statusFilter = $state("all");
@@ -164,12 +166,15 @@
         {/if}
         <div class="wl-info">
           <div class="wl-header">
-            <span class="wl-key">{wl.issue_key}</span>
+            <button class="wl-key-link" onclick={() => openUrl(`${settingsStore.jiraBaseUrl}/browse/${wl.issue_key}`)}>{wl.issue_key}</button>
             <span class="wl-duration">{formatDurationShort(wl.duration_seconds)}</span>
             <span class="badge {statusClass(wl.sync_status)}" title={wl.sync_error ?? ""}>
               {wl.sync_status}
             </span>
           </div>
+          {#if wl.issue_summary}
+            <div class="wl-summary">{wl.issue_summary}</div>
+          {/if}
           <div class="wl-meta">
             <span>{formatDateTime(wl.started_at)}</span>
             {#if wl.description}
@@ -341,10 +346,27 @@
     margin-bottom: 2px;
   }
 
-  .wl-key {
+  .wl-key-link {
     font-weight: 600;
     font-size: 12px;
     color: var(--accent);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: none;
+  }
+
+  .wl-key-link:hover {
+    text-decoration: underline;
+  }
+
+  .wl-summary {
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .wl-duration {

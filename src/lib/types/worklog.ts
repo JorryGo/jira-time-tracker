@@ -9,6 +9,7 @@ export interface Worklog {
   sync_error: string | null;
   created_at: string;
   updated_at: string;
+  issue_summary: string | null;
 }
 
 export interface WorklogFilter {

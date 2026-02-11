@@ -17,6 +17,7 @@
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5",
     "@tauri-apps/cli": "^2",
+    "@typescript-eslint/types": "^8.55.0",
     "svelte": "^5",
     "svelte-check": "^4",
     "typescript": "^5",

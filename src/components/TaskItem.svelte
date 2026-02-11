@@ -2,6 +2,8 @@
   import type { JiraIssue } from "../lib/types/jira";
   import { timerStore } from "../lib/state/timer.svelte";
   import { tasksStore } from "../lib/state/tasks.svelte";
+  import { settingsStore } from "../lib/state/settings.svelte";
+  import { openUrl } from "@tauri-apps/plugin-opener";
   import pinIcon from "../assets/pin.png";
 
   let { issue, isPinned, onAddManual }: { issue: JiraIssue; isPinned: boolean; onAddManual: (issue: JiraIssue) => void } = $props();
@@ -24,7 +26,7 @@
 <div class="task-item" class:active={isTimerOnThis}>
   <div class="task-info">
     <div class="task-header">
-      <span class="task-key">{issue.issue_key}</span>
+      <button class="task-key-link" onclick={() => openUrl(`${settingsStore.jiraBaseUrl}/browse/${issue.issue_key}`)}>{issue.issue_key}</button>
       {#if issue.status}
         <span class="task-status">{issue.status}</span>
       {/if}
@@ -83,11 +85,20 @@
     margin-bottom: 2px;
   }
 
-  .task-key {
+  .task-key-link {
     font-weight: 600;
     font-size: 12px;
     color: var(--accent);
     flex-shrink: 0;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: none;
+  }
+
+  .task-key-link:hover {
+    text-decoration: underline;
   }
 
   .task-status {

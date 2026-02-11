@@ -14,6 +14,7 @@ pub struct Worklog {
     pub sync_error: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+    pub issue_summary: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -32,7 +33,10 @@ pub async fn get_worklogs(
     // Build query dynamically based on filter
     // Since sqlx doesn't support dynamic queries well with compile-time checking,
     // we use query_as with raw SQL
-    let mut sql = String::from("SELECT * FROM worklogs WHERE 1=1");
+    let mut sql = String::from(
+        "SELECT worklogs.*, issues.summary as issue_summary FROM worklogs \
+         LEFT JOIN issues ON worklogs.issue_key = issues.issue_key WHERE 1=1",
+    );
     let mut binds: Vec<String> = Vec::new();
 
     if let Some(ref f) = filter {
