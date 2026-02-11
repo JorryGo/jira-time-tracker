@@ -28,6 +28,12 @@
     return `${d}/${m}/${y}`;
   });
 
+  const statusRank = (s: string) => s === "pending" ? 0 : s === "error" ? 1 : 2;
+
+  let sortedWorklogs = $derived(
+    [...worklogsStore.items].sort((a, b) => statusRank(a.sync_status) - statusRank(b.sync_status))
+  );
+
   let totalSeconds = $derived(
     worklogsStore.items.reduce((sum, wl) => sum + wl.duration_seconds, 0)
   );
@@ -171,7 +177,7 @@
   {/if}
 
   <div class="worklog-list">
-    {#each worklogsStore.items as wl (wl.id)}
+    {#each sortedWorklogs as wl (wl.id)}
       <div class="worklog-row">
         {#if wl.sync_status === "pending"}
           <input

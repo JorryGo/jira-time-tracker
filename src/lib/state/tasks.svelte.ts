@@ -14,7 +14,10 @@ class TasksStore {
   statusOrder = $state<string[]>(DEFAULT_STATUS_ORDER);
 
   get sortedItems(): JiraIssue[] {
-    let filtered = this.items;
+    const hiddenSet = new Set(settingsStore.hiddenStatuses.map((s) => s.toLowerCase()));
+    let filtered = this.items.filter(
+      (i) => !i.status || !hiddenSet.has(i.status.toLowerCase()),
+    );
 
     const q = this.searchQuery.trim().toLowerCase();
     if (q) {

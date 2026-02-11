@@ -57,6 +57,7 @@
   }
 
   let newStatus = $state("");
+  let newHiddenStatus = $state("");
 
   function moveStatus(index: number, direction: -1 | 1) {
     const arr = [...tasksStore.statusOrder];
@@ -81,6 +82,23 @@
 
   function resetStatusOrder() {
     tasksStore.saveStatusOrder(["In Progress", "Reopened", "Ready for Develop"]);
+  }
+
+  function removeHiddenStatus(index: number) {
+    const arr = settingsStore.hiddenStatuses.filter((_, i) => i !== index);
+    settingsStore.saveHiddenStatuses(arr);
+  }
+
+  function addHiddenStatus() {
+    const name = newHiddenStatus.trim();
+    if (!name) return;
+    if (settingsStore.hiddenStatuses.some((s) => s.toLowerCase() === name.toLowerCase())) return;
+    settingsStore.saveHiddenStatuses([...settingsStore.hiddenStatuses, name]);
+    newHiddenStatus = "";
+  }
+
+  function resetHiddenStatuses() {
+    settingsStore.saveHiddenStatuses(["Done", "Canceled"]);
   }
 </script>
 
@@ -155,6 +173,34 @@
     </div>
     <div class="btn-row">
       <button class="btn btn-secondary" onclick={resetStatusOrder}>Reset to Default</button>
+    </div>
+  </section>
+
+  <section>
+    <h3>Hidden Statuses</h3>
+    <p class="section-hint">Tasks with these statuses will be hidden from the list.</p>
+    <div class="status-list">
+      {#each settingsStore.hiddenStatuses as status, i (status)}
+        <div class="status-row">
+          <span class="status-name">{status}</span>
+          <div class="status-actions">
+            <button class="btn-sm btn-danger-sm" onclick={() => removeHiddenStatus(i)} title="Remove">&times;</button>
+          </div>
+        </div>
+      {/each}
+    </div>
+    <div class="add-status-row">
+      <input
+        type="text"
+        class="add-status-input"
+        placeholder="Status name..."
+        bind:value={newHiddenStatus}
+        onkeydown={(e) => e.key === "Enter" && addHiddenStatus()}
+      />
+      <button class="btn btn-secondary" onclick={addHiddenStatus}>Add</button>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick={resetHiddenStatuses}>Reset to Default</button>
     </div>
   </section>
 
