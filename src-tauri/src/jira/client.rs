@@ -75,21 +75,23 @@ impl JiraClient {
         started: &str,
         comment: &str,
     ) -> Result<JiraWorklogResponse, String> {
-        let body = serde_json::json!({
+        let mut body = serde_json::json!({
             "timeSpentSeconds": time_spent_seconds,
             "started": started,
-            "comment": {
+        });
+        if !comment.is_empty() {
+            body["comment"] = serde_json::json!({
                 "type": "doc",
                 "version": 1,
                 "content": [{
                     "type": "paragraph",
                     "content": [{
                         "type": "text",
-                        "text": if comment.is_empty() { "Time logged via Jira Time Tracker" } else { comment }
+                        "text": comment
                     }]
                 }]
-            }
-        });
+            });
+        }
 
         self.client
             .post(format!(

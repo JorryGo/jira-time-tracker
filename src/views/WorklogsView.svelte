@@ -201,10 +201,10 @@
           {/if}
           <div class="wl-meta">
             <span>{formatDateTime(wl.started_at)}</span>
-            {#if wl.description}
-              <span class="wl-desc">{wl.description}</span>
-            {/if}
           </div>
+          {#if wl.description}
+            <div class="wl-desc">{wl.description}</div>
+          {/if}
         </div>
         <div class="wl-actions">
           {#if wl.sync_status !== "synced"}
@@ -227,7 +227,7 @@
 {/if}
 
 {#if showAddModal}
-  <AddWorklogModal onClose={() => (showAddModal = false)} />
+  <AddWorklogModal selectedDate={selectedDate} onClose={() => (showAddModal = false)} />
 {/if}
 
 <style>
@@ -451,9 +451,16 @@
   }
 
   .wl-desc {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+    padding: 2px 6px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-style: italic;
   }
 
   .wl-actions {

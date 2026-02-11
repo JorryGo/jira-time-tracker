@@ -99,11 +99,14 @@ pub async fn create_worklog(
 
     let id = result.last_insert_rowid();
 
-    sqlx::query_as::<_, Worklog>("SELECT * FROM worklogs WHERE id = ?1")
-        .bind(id)
-        .fetch_one(&state.db)
-        .await
-        .map_err(|e| e.to_string())
+    sqlx::query_as::<_, Worklog>(
+        "SELECT worklogs.*, issues.summary as issue_summary FROM worklogs \
+         LEFT JOIN issues ON worklogs.issue_key = issues.issue_key WHERE worklogs.id = ?1",
+    )
+    .bind(id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -159,11 +162,14 @@ pub async fn update_worklog(
         .await
         .map_err(|e| e.to_string())?;
 
-    sqlx::query_as::<_, Worklog>("SELECT * FROM worklogs WHERE id = ?1")
-        .bind(id)
-        .fetch_one(&state.db)
-        .await
-        .map_err(|e| e.to_string())
+    sqlx::query_as::<_, Worklog>(
+        "SELECT worklogs.*, issues.summary as issue_summary FROM worklogs \
+         LEFT JOIN issues ON worklogs.issue_key = issues.issue_key WHERE worklogs.id = ?1",
+    )
+    .bind(id)
+    .fetch_one(&state.db)
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

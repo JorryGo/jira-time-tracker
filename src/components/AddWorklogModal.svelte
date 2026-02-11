@@ -3,11 +3,20 @@
   import { worklogsStore } from "../lib/state/worklogs.svelte";
   import { searchIssues } from "../lib/commands/jira";
 
+  function toLocalDateStr(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
   let {
     preselectedIssue = null,
+    selectedDate = null,
     onClose,
   }: {
     preselectedIssue?: JiraIssue | null;
+    selectedDate?: string | null;
     onClose: () => void;
   } = $props();
 
@@ -16,7 +25,12 @@
   let hours = $state(0);
   let minutes = $state(30);
   let description = $state("");
-  let date = $state(new Date().toISOString().split("T")[0]);
+  let date = $state(selectedDate ?? toLocalDateStr(new Date()));
+
+  let displayDate = $derived.by(() => {
+    const [y, m, d] = date.split("-");
+    return `${d}/${m}/${y}`;
+  });
   let saving = $state(false);
   let error = $state("");
 
@@ -38,7 +52,7 @@
       searching = true;
       try {
         searchResults = await searchIssues(
-          `text ~ "${value}" OR key = "${value}" ORDER BY updated DESC`,
+          `key = "${value}" OR summary ~ "${value}" ORDER BY updated DESC`,
           10,
         );
       } catch {
@@ -129,7 +143,14 @@
       </div>
       <div class="field">
         <label>Date</label>
-        <input type="date" bind:value={date} />
+        <div class="date-label-wrap">
+          <span class="date-label">{displayDate}</span>
+          <input
+            type="date"
+            class="date-overlay"
+            bind:value={date}
+          />
+        </div>
       </div>
     </div>
 
@@ -303,5 +324,33 @@
   .btn-secondary {
     background: var(--bg-secondary);
     border: 1px solid var(--border);
+  }
+
+  .date-label-wrap {
+    position: relative;
+    cursor: pointer;
+    display: inline-block;
+  }
+
+  .date-label {
+    display: block;
+    font-size: 12px;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+  }
+
+  .date-label-wrap:hover .date-label {
+    background: var(--bg-secondary);
+  }
+
+  .date-overlay {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
   }
 </style>
