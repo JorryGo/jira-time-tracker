@@ -37,6 +37,7 @@ pub fn run() {
             commands::worklogs::create_worklog,
             commands::worklogs::update_worklog,
             commands::worklogs::delete_worklog,
+            commands::quit_app,
         ])
         .setup(|app| {
             // Hide dock icon on macOS — pure menubar app
