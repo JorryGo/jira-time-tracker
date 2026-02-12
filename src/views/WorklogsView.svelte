@@ -176,15 +176,12 @@
 <div class="worklogs-view">
   <div class="date-bar">
     <button class="btn btn-sm btn-nav" onclick={() => changeDate(-1)} title="Previous day">&#8592;</button>
-    <div class="date-label-wrap">
-      <span class="date-label">{displayDate}</span>
-      <input
-        type="date"
-        class="date-overlay"
-        bind:value={selectedDate}
-        onchange={handleFilterChange}
-      />
-    </div>
+    <input
+      type="date"
+      class="date-picker"
+      bind:value={selectedDate}
+      onchange={handleFilterChange}
+    />
     <button class="btn btn-sm btn-nav" onclick={() => changeDate(1)} title="Next day">&#8594;</button>
     {#if selectedDate !== toLocalDateStr(new Date())}
       <button class="btn btn-sm date-today" onclick={goToToday}>Today</button>
@@ -345,29 +342,19 @@
     right: 12px;
   }
 
-  .date-label-wrap {
-    position: relative;
-    cursor: pointer;
-  }
-
-  .date-label {
+  .date-picker {
     font-size: 13px;
     font-weight: 600;
     padding: 2px 8px;
     border-radius: var(--radius-sm);
-  }
-
-  .date-label-wrap:hover .date-label {
-    background: var(--bg-secondary);
-  }
-
-  .date-overlay {
-    position: absolute;
-    inset: 0;
-    opacity: 0;
+    border: 1px solid transparent;
+    background: transparent;
     cursor: pointer;
-    width: 100%;
-    height: 100%;
+    color: var(--text);
+  }
+
+  .date-picker:hover {
+    background: var(--bg-secondary);
   }
 
   .toolbar {
