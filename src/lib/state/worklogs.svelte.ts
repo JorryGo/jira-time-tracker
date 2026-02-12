@@ -71,8 +71,8 @@ class WorklogsStore {
     return { total: ids.length, success, failed: ids.length - success, errors };
   }
 
-  async pushAll(): Promise<PushSummary> {
-    const result = await pushAllPending();
+  async pushAll(date: string): Promise<PushSummary> {
+    const result = await pushAllPending(date);
     this.selectedIds = new Set();
     await this.refresh();
     return result;

@@ -25,6 +25,6 @@ export async function pushWorklog(worklogId: number): Promise<void> {
   return invoke("jira_push_worklog", { worklogId });
 }
 
-export async function pushAllPending(): Promise<PushSummary> {
-  return invoke("jira_push_all_pending");
+export async function pushAllPending(date: string): Promise<PushSummary> {
+  return invoke("jira_push_all_pending", { date });
 }

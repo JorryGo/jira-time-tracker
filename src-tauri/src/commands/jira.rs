@@ -132,9 +132,14 @@ pub async fn jira_push_worklog(
 #[tauri::command]
 pub async fn jira_push_all_pending(
     state: State<'_, AppState>,
+    date: String,
 ) -> Result<PushSummary, String> {
+    let date_from = format!("{}T00:00:00", date);
+    let date_to = format!("{}T23:59:59", date);
     let ids: Vec<(i64,)> =
-        sqlx::query_as("SELECT id FROM worklogs WHERE sync_status = 'pending'")
+        sqlx::query_as("SELECT id FROM worklogs WHERE sync_status = 'pending' AND started_at >= ?1 AND started_at <= ?2")
+            .bind(&date_from)
+            .bind(&date_to)
             .fetch_all(&state.db)
             .await
             .map_err(|e| e.to_string())?;

@@ -96,7 +96,7 @@
   async function handlePushAll() {
     pushingAll = true;
     try {
-      const result = await worklogsStore.pushAll();
+      const result = await worklogsStore.pushAll(selectedDate);
       toast = `Pushed ${result.success}/${result.total}${result.failed > 0 ? `, ${result.failed} failed` : ""}`;
     } catch (e) {
       toast = String(e);
