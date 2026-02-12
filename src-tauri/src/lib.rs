@@ -154,35 +154,45 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            if let WindowEvent::Focused(false) = event {
-                if window.label() == "main" {
-                    // Save window position before hiding
-                    if let Ok(pos) = window.outer_position() {
+            match event {
+                WindowEvent::Moved(pos) => {
+                    if window.label() == "main" {
                         if let Some(app_state) = window.try_state::<state::AppState>() {
                             *app_state.window_position.lock().unwrap() =
                                 Some((pos.x, pos.y));
-                            let db = app_state.db.clone();
-                            let val = format!("{},{}", pos.x, pos.y);
-                            tauri::async_runtime::spawn(async move {
-                                let _ = sqlx::query(
-                                    "INSERT INTO settings (key, value) VALUES ('window_position', ?1) \
-                                     ON CONFLICT(key) DO UPDATE SET value = ?1",
-                                )
-                                .bind(val)
-                                .execute(&db)
-                                .await;
-                            });
                         }
                     }
-                    // Debounce hide — on Windows startDragging() briefly loses focus
-                    let window_clone = window.clone();
-                    tauri::async_runtime::spawn(async move {
-                        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-                        if !window_clone.is_focused().unwrap_or(true) {
-                            let _ = window_clone.hide();
-                        }
-                    });
                 }
+                WindowEvent::Focused(false) => {
+                    if window.label() == "main" {
+                        // Persist position to SQLite
+                        if let Some(app_state) = window.try_state::<state::AppState>() {
+                            let saved = *app_state.window_position.lock().unwrap();
+                            if let Some((x, y)) = saved {
+                                let db = app_state.db.clone();
+                                let val = format!("{},{}", x, y);
+                                tauri::async_runtime::spawn(async move {
+                                    let _ = sqlx::query(
+                                        "INSERT INTO settings (key, value) VALUES ('window_position', ?1) \
+                                         ON CONFLICT(key) DO UPDATE SET value = ?1",
+                                    )
+                                    .bind(val)
+                                    .execute(&db)
+                                    .await;
+                                });
+                            }
+                        }
+                        // Debounce hide — on Windows startDragging() briefly loses focus
+                        let window_clone = window.clone();
+                        tauri::async_runtime::spawn(async move {
+                            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                            if !window_clone.is_focused().unwrap_or(true) {
+                                let _ = window_clone.hide();
+                            }
+                        });
+                    }
+                }
+                _ => {}
             }
         })
         .run(tauri::generate_context!())
