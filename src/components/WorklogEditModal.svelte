@@ -10,9 +10,13 @@
     onClose: () => void;
   } = $props();
 
+  // svelte-ignore state_referenced_locally
   let hours = $state(Math.floor(worklog.duration_seconds / 3600));
+  // svelte-ignore state_referenced_locally
   let minutes = $state(Math.floor((worklog.duration_seconds % 3600) / 60));
+  // svelte-ignore state_referenced_locally
   let description = $state(worklog.description);
+  // svelte-ignore state_referenced_locally
   let date = $state(worklog.started_at.split("T")[0]);
   let saving = $state(false);
   let error = $state("");
@@ -45,22 +49,26 @@
 
     <div class="field-row">
       <div class="field">
-        <label>Hours</label>
-        <input type="number" min="0" max="24" bind:value={hours} />
+        <label>Hours
+          <input type="number" min="0" max="24" bind:value={hours} />
+        </label>
       </div>
       <div class="field">
-        <label>Minutes</label>
-        <input type="number" min="0" max="59" bind:value={minutes} />
+        <label>Minutes
+          <input type="number" min="0" max="59" bind:value={minutes} />
+        </label>
       </div>
       <div class="field">
-        <label>Date</label>
-        <input type="date" bind:value={date} />
+        <label>Date
+          <input type="date" bind:value={date} />
+        </label>
       </div>
     </div>
 
     <div class="field">
-      <label>Description</label>
-      <textarea rows="2" bind:value={description} placeholder="What did you work on?"></textarea>
+      <label>Description
+        <textarea rows="2" bind:value={description} placeholder="What did you work on?"></textarea>
+      </label>
     </div>
 
     {#if error}

@@ -20,11 +20,14 @@
     onClose: () => void;
   } = $props();
 
+  // svelte-ignore state_referenced_locally
   let issueKey = $state(preselectedIssue?.issue_key ?? "");
+  // svelte-ignore state_referenced_locally
   let issueSummary = $state(preselectedIssue?.summary ?? "");
   let hours = $state(0);
   let minutes = $state(30);
   let description = $state("");
+  // svelte-ignore state_referenced_locally
   let date = $state(selectedDate ?? toLocalDateStr(new Date()));
 
   let displayDate = $derived.by(() => {
@@ -38,6 +41,7 @@
   let searchQuery = $state("");
   let searchResults = $state<JiraIssue[]>([]);
   let searching = $state(false);
+  // svelte-ignore state_referenced_locally
   let showSearch = $state(!preselectedIssue);
   let searchTimeout: number | null = null;
 
@@ -103,13 +107,14 @@
 
     {#if showSearch}
       <div class="field">
-        <label>Task</label>
-        <input
-          type="text"
-          placeholder="Search by key or text..."
-          value={searchQuery}
-          oninput={(e) => handleSearchInput(e.currentTarget.value)}
-        />
+        <label>Task
+          <input
+            type="text"
+            placeholder="Search by key or text..."
+            value={searchQuery}
+            oninput={(e) => handleSearchInput(e.currentTarget.value)}
+          />
+        </label>
         {#if searching}
           <div class="search-hint">Searching...</div>
         {/if}
@@ -134,29 +139,33 @@
 
     <div class="field-row">
       <div class="field">
-        <label>Hours</label>
-        <input type="number" min="0" max="24" bind:value={hours} />
+        <label>Hours
+          <input type="number" min="0" max="24" bind:value={hours} />
+        </label>
       </div>
       <div class="field">
-        <label>Minutes</label>
-        <input type="number" min="0" max="59" bind:value={minutes} />
+        <label>Minutes
+          <input type="number" min="0" max="59" bind:value={minutes} />
+        </label>
       </div>
       <div class="field">
-        <label>Date</label>
-        <div class="date-label-wrap">
-          <span class="date-label">{displayDate}</span>
-          <input
-            type="date"
-            class="date-overlay"
-            bind:value={date}
-          />
-        </div>
+        <label>Date
+          <div class="date-label-wrap">
+            <span class="date-label">{displayDate}</span>
+            <input
+              type="date"
+              class="date-overlay"
+              bind:value={date}
+            />
+          </div>
+        </label>
       </div>
     </div>
 
     <div class="field">
-      <label>Description</label>
-      <textarea rows="2" bind:value={description} placeholder="What did you work on?"></textarea>
+      <label>Description
+        <textarea rows="2" bind:value={description} placeholder="What did you work on?"></textarea>
+      </label>
     </div>
 
     {#if error}

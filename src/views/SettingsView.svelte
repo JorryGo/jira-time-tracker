@@ -111,16 +111,19 @@
       </div>
     {/if}
     <div class="field">
-      <label>Base URL</label>
-      <input type="text" bind:value={baseUrl} placeholder="https://yoursite.atlassian.net" />
+      <label>Base URL
+        <input type="text" bind:value={baseUrl} placeholder="https://yoursite.atlassian.net" />
+      </label>
     </div>
     <div class="field">
-      <label>Email</label>
-      <input type="email" bind:value={email} placeholder="you@company.com" />
+      <label>Email
+        <input type="email" bind:value={email} placeholder="you@company.com" />
+      </label>
     </div>
     <div class="field">
-      <label>API Token</label>
-      <input type="password" bind:value={apiToken} placeholder="Your Jira API token" />
+      <label>API Token
+        <input type="password" bind:value={apiToken} placeholder="Your Jira API token" />
+      </label>
       <span class="field-hint">
         <button class="btn-link" onclick={() => openUrl("https://id.atlassian.com/manage-profile/security/api-tokens")}>
           Get token
