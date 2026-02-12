@@ -51,6 +51,17 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      - name: Set version from tag
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          echo "Setting version to $VERSION"
+          cd src-tauri
+          sed -i.bak "s/\"version\": \".*\"/\"version\": \"$VERSION\"/" tauri.conf.json
+          rm -f tauri.conf.json.bak
+          cd ..
+          npm version $VERSION --no-git-tag-version --allow-same-version
+        shell: bash
+
       - name: Build and release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -61,3 +72,14 @@ jobs:
           releaseName: 'Jira Time Tracker ${{ github.ref_name }}'
           releaseDraft: false
           prerelease: false
+          releaseBody: |
+            ## Installation
+
+            **macOS**: After downloading the `.dmg`, if you see "is damaged and can't be opened", run:
+            ```
+            xattr -cr /Applications/Jira\ Time\ Tracker.app
+            ```
+
+            **Windows**: Run the `.exe` installer.
+
+            **Linux**: Use `.deb` or `.AppImage`.

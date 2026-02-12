@@ -230,7 +230,7 @@
   {/if}
 
   <section class="about">
-    <p>Jira Time Tracker v0.1.0</p>
+    <p>Jira Time Tracker v0.1.2</p>
   </section>
 </div>
 
