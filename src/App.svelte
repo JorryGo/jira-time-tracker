@@ -1,15 +1,22 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
   import TasksView from "./views/TasksView.svelte";
   import WorklogsView from "./views/WorklogsView.svelte";
   import SettingsView from "./views/SettingsView.svelte";
 
   let activeTab = $state<"tasks" | "worklogs" | "settings">("tasks");
   let showQuitConfirm = $state(false);
+
+  function handleDrag(e: MouseEvent) {
+    if ((e.target as HTMLElement).closest("button")) return;
+    getCurrentWindow().startDragging();
+  }
 </script>
 
 <div class="app">
-  <nav class="tabs" data-tauri-drag-region>
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="tabs" onmousedown={handleDrag}>
     <button class="tab" class:active={activeTab === "tasks"} onclick={() => activeTab = "tasks"}>
       Tasks
     </button>
@@ -26,7 +33,7 @@
         <line x1="21" y1="12" x2="9" y2="12" />
       </svg>
     </button>
-  </nav>
+  </div>
 
   <main class="content">
     {#if activeTab === "tasks"}

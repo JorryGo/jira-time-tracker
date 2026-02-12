@@ -98,7 +98,7 @@ pub fn run() {
                     if let TrayIconEvent::Click {
                         button: MouseButton::Left,
                         button_state: MouseButtonState::Up,
-                        rect: _rect,
+                        position: _click_pos,
                         ..
                     } = event
                     {
@@ -127,28 +127,16 @@ pub fn run() {
                                     {
                                         if let Ok(win_size) = window.outer_size() {
                                             let scale = window.scale_factor().unwrap_or(1.0);
-                                            let tray_pos =
-                                                _rect.position.to_physical::<f64>(scale);
-                                            let tray_size =
-                                                _rect.size.to_physical::<f64>(scale);
+                                            let click =
+                                                _click_pos.to_physical::<f64>(scale);
                                             let win_w = win_size.width as f64;
                                             let win_h = win_size.height as f64;
-                                            let x = (tray_pos.x + tray_size.width / 2.0
-                                                - win_w / 2.0)
-                                                as i32;
-                                            let tray_bottom =
-                                                tray_pos.y + tray_size.height;
-                                            let y = if let Ok(Some(monitor)) =
-                                                window.current_monitor()
-                                            {
-                                                let screen_h = monitor.size().height as f64;
-                                                if tray_bottom + win_h <= screen_h {
-                                                    tray_bottom as i32
-                                                } else {
-                                                    (tray_pos.y - win_h) as i32
-                                                }
+                                            let x = (click.x - win_w / 2.0) as i32;
+                                            // Show above click if tray is at bottom, below if at top
+                                            let y = if click.y > win_h {
+                                                (click.y - win_h) as i32
                                             } else {
-                                                (tray_pos.y - win_h) as i32
+                                                click.y as i32
                                             };
                                             let _ = window.set_position(
                                                 tauri::Position::Physical(
