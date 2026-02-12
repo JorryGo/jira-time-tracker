@@ -9,6 +9,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager, WindowEvent,
 };
+#[cfg(target_os = "macos")]
 use tauri_plugin_positioner::{Position, WindowExt};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -125,14 +126,18 @@ pub fn run() {
                                     #[cfg(not(target_os = "macos"))]
                                     {
                                         if let Ok(win_size) = window.outer_size() {
+                                            let scale = window.scale_factor().unwrap_or(1.0);
+                                            let tray_pos =
+                                                _rect.position.to_physical::<f64>(scale);
+                                            let tray_size =
+                                                _rect.size.to_physical::<f64>(scale);
                                             let win_w = win_size.width as f64;
                                             let win_h = win_size.height as f64;
-                                            let x = (_rect.position.x
-                                                + _rect.size.width / 2.0
+                                            let x = (tray_pos.x + tray_size.width / 2.0
                                                 - win_w / 2.0)
                                                 as i32;
                                             let tray_bottom =
-                                                _rect.position.y + _rect.size.height;
+                                                tray_pos.y + tray_size.height;
                                             let y = if let Ok(Some(monitor)) =
                                                 window.current_monitor()
                                             {
@@ -140,10 +145,10 @@ pub fn run() {
                                                 if tray_bottom + win_h <= screen_h {
                                                     tray_bottom as i32
                                                 } else {
-                                                    (_rect.position.y - win_h) as i32
+                                                    (tray_pos.y - win_h) as i32
                                                 }
                                             } else {
-                                                (_rect.position.y - win_h) as i32
+                                                (tray_pos.y - win_h) as i32
                                             };
                                             let _ = window.set_position(
                                                 tauri::Position::Physical(
