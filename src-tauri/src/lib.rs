@@ -151,9 +151,8 @@ pub fn run() {
                                 // Tauri's set_focus() alone doesn't trigger full input locale activation.
                                 #[cfg(target_os = "windows")]
                                 {
-                                    use windows::Win32::UI::WindowsAndMessaging::{
-                                        SetForegroundWindow, SetFocus,
-                                    };
+                                    use windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow;
+                                    use windows::Win32::UI::Input::KeyboardAndMouse::SetFocus;
                                     if let Ok(hwnd) = window.hwnd() {
                                         unsafe {
                                             let _ = SetForegroundWindow(hwnd);
