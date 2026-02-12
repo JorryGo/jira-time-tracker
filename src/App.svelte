@@ -9,7 +9,7 @@
 </script>
 
 <div class="app">
-  <nav class="tabs">
+  <nav class="tabs" data-tauri-drag-region>
     <button class="tab" class:active={activeTab === "tasks"} onclick={() => activeTab = "tasks"}>
       Tasks
     </button>

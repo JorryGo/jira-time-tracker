@@ -53,24 +53,38 @@ pub fn run() {
             let db_path = app_dir.join("jira-tracker.db");
             let db_url = format!("sqlite:{}?mode=rwc", db_path.display());
 
-            let pool = tauri::async_runtime::block_on(async {
+            let (pool, saved_window_pos) = tauri::async_runtime::block_on(async {
                 let pool = SqlitePoolOptions::new()
                     .max_connections(5)
                     .connect(&db_url)
                     .await
                     .expect("Failed to create database pool");
 
-                // Run migrations
                 db::migrations::run_migrations(&pool)
                     .await
                     .expect("Failed to run migrations");
 
-                pool
+                let saved_pos = sqlx::query_scalar::<_, String>(
+                    "SELECT value FROM settings WHERE key = 'window_position'",
+                )
+                .fetch_optional(&pool)
+                .await
+                .ok()
+                .flatten()
+                .and_then(|s| {
+                    let mut parts = s.split(',');
+                    let x = parts.next()?.parse::<i32>().ok()?;
+                    let y = parts.next()?.parse::<i32>().ok()?;
+                    Some((x, y))
+                });
+
+                (pool, saved_pos)
             });
 
             app.manage(state::AppState {
                 db: pool,
                 jira_config: Mutex::new(None),
+                window_position: Mutex::new(saved_window_pos),
             });
 
             // Build tray icon
@@ -92,35 +106,51 @@ pub fn run() {
                             if window.is_visible().unwrap_or(false) {
                                 let _ = window.hide();
                             } else {
-                                // On macOS tray is always at the top — use plugin positioning
-                                #[cfg(target_os = "macos")]
-                                {
-                                    let _ = window.move_window(Position::TrayBottomCenter);
-                                }
-                                // On Windows/Linux tray can be top or bottom — check available space
-                                #[cfg(not(target_os = "macos"))]
-                                {
-                                    if let Ok(win_size) = window.outer_size() {
-                                        let win_w = win_size.width as f64;
-                                        let win_h = win_size.height as f64;
-                                        let x = (_rect.position.x + _rect.size.width / 2.0
-                                            - win_w / 2.0)
-                                            as i32;
-                                        let tray_bottom = _rect.position.y + _rect.size.height;
-                                        let y = if let Ok(Some(monitor)) = window.current_monitor()
-                                        {
-                                            let screen_h = monitor.size().height as f64;
-                                            if tray_bottom + win_h <= screen_h {
-                                                tray_bottom as i32
+                                // Use saved position if the user has repositioned the window
+                                let saved = *app
+                                    .state::<state::AppState>()
+                                    .window_position
+                                    .lock()
+                                    .unwrap();
+                                if let Some((x, y)) = saved {
+                                    let _ = window.set_position(tauri::Position::Physical(
+                                        tauri::PhysicalPosition::new(x, y),
+                                    ));
+                                } else {
+                                    // First launch: position relative to tray icon
+                                    #[cfg(target_os = "macos")]
+                                    {
+                                        let _ = window.move_window(Position::TrayBottomCenter);
+                                    }
+                                    #[cfg(not(target_os = "macos"))]
+                                    {
+                                        if let Ok(win_size) = window.outer_size() {
+                                            let win_w = win_size.width as f64;
+                                            let win_h = win_size.height as f64;
+                                            let x = (_rect.position.x
+                                                + _rect.size.width / 2.0
+                                                - win_w / 2.0)
+                                                as i32;
+                                            let tray_bottom =
+                                                _rect.position.y + _rect.size.height;
+                                            let y = if let Ok(Some(monitor)) =
+                                                window.current_monitor()
+                                            {
+                                                let screen_h = monitor.size().height as f64;
+                                                if tray_bottom + win_h <= screen_h {
+                                                    tray_bottom as i32
+                                                } else {
+                                                    (_rect.position.y - win_h) as i32
+                                                }
                                             } else {
                                                 (_rect.position.y - win_h) as i32
-                                            }
-                                        } else {
-                                            (_rect.position.y - win_h) as i32
-                                        };
-                                        let _ = window.set_position(tauri::Position::Physical(
-                                            tauri::PhysicalPosition::new(x, y),
-                                        ));
+                                            };
+                                            let _ = window.set_position(
+                                                tauri::Position::Physical(
+                                                    tauri::PhysicalPosition::new(x, y),
+                                                ),
+                                            );
+                                        }
                                     }
                                 }
                                 let _ = window.show();
@@ -136,6 +166,24 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let WindowEvent::Focused(false) = event {
                 if window.label() == "main" {
+                    // Save window position before hiding
+                    if let Ok(pos) = window.outer_position() {
+                        if let Some(app_state) = window.try_state::<state::AppState>() {
+                            *app_state.window_position.lock().unwrap() =
+                                Some((pos.x, pos.y));
+                            let db = app_state.db.clone();
+                            let val = format!("{},{}", pos.x, pos.y);
+                            tauri::async_runtime::spawn(async move {
+                                let _ = sqlx::query(
+                                    "INSERT INTO settings (key, value) VALUES ('window_position', ?1) \
+                                     ON CONFLICT(key) DO UPDATE SET value = ?1",
+                                )
+                                .bind(val)
+                                .execute(&db)
+                                .await;
+                            });
+                        }
+                    }
                     let _ = window.hide();
                 }
             }
