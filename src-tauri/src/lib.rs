@@ -174,7 +174,14 @@ pub fn run() {
                             });
                         }
                     }
-                    let _ = window.hide();
+                    // Debounce hide — on Windows startDragging() briefly loses focus
+                    let window_clone = window.clone();
+                    tauri::async_runtime::spawn(async move {
+                        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                        if !window_clone.is_focused().unwrap_or(true) {
+                            let _ = window_clone.hide();
+                        }
+                    });
                 }
             }
         })

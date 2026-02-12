@@ -3,6 +3,8 @@
   import { tasksStore } from "../lib/state/tasks.svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
 
+  const isMac = navigator.platform.toUpperCase().includes("MAC");
+
   let baseUrl = $state(settingsStore.jiraBaseUrl);
   let email = $state(settingsStore.jiraEmail);
   let apiToken = $state("");
@@ -207,6 +209,7 @@
     </div>
   </section>
 
+  {#if isMac}
   <section>
     <h3>Appearance</h3>
     <label class="checkbox-row">
@@ -218,6 +221,7 @@
       Show task in menu bar
     </label>
   </section>
+  {/if}
 
   {#if message}
     <div class="message" class:error={messageType === "error"} class:success={messageType === "success"}>
