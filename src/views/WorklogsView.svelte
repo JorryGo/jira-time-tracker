@@ -75,6 +75,53 @@
     refreshWorklogs();
   }
 
+  let showReport = $state(false);
+  let reportText = $state("");
+  let copied = $state(false);
+
+  function generateReport(): string {
+    const grouped = new Map<string, { summary: string | null; totalSeconds: number; descriptions: { text: string; seconds: number }[] }>();
+
+    for (const wl of sortedWorklogs) {
+      let group = grouped.get(wl.issue_key);
+      if (!group) {
+        group = { summary: wl.issue_summary, totalSeconds: 0, descriptions: [] };
+        grouped.set(wl.issue_key, group);
+      }
+      group.totalSeconds += wl.duration_seconds;
+      group.descriptions.push({
+        text: wl.description || "",
+        seconds: wl.duration_seconds,
+      });
+    }
+
+    const lines: string[] = [];
+    let first = true;
+    for (const [key, group] of grouped) {
+      if (!first) lines.push("");
+      first = false;
+      const header = group.summary ? `${key} - ${group.summary}` : key;
+      lines.push(`${header} (${formatDurationShort(group.totalSeconds)})`);
+      const descs = group.descriptions.filter(d => d.text);
+      for (const d of descs) {
+        lines.push(`  - ${d.text}`);
+      }
+    }
+    return lines.join("\n");
+  }
+
+  function openReport() {
+    reportText = generateReport();
+    copied = false;
+    showReport = true;
+  }
+
+  async function copyReport() {
+    await navigator.clipboard.writeText(reportText);
+    copied = true;
+    setTimeout(() => (copied = false), 2000);
+  }
+
   let confirmDeleteId = $state<number | null>(null);
 
   async function handleDelete(id: number) {
@@ -153,6 +200,9 @@
         <option value="error">Error</option>
       </select>
       <button class="btn btn-sm" onclick={() => (showAddModal = true)}>+ Add</button>
+      {#if sortedWorklogs.length > 0}
+        <button class="btn btn-sm" onclick={openReport}>Report</button>
+      {/if}
     </div>
     <div class="toolbar-right">
       {#if worklogsStore.selectedCount > 0}
@@ -237,6 +287,25 @@
 
 {#if showAddModal}
   <AddWorklogModal selectedDate={selectedDate} onClose={() => (showAddModal = false)} />
+{/if}
+
+{#if showReport}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="modal-overlay" onmousedown={() => (showReport = false)}>
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="report-modal" onmousedown={(e) => e.stopPropagation()}>
+      <div class="report-header">
+        <span class="report-title">Report — {displayDate}</span>
+      </div>
+      <textarea class="report-textarea" bind:value={reportText}></textarea>
+      <div class="report-actions">
+        <button class="btn btn-sm" onclick={() => (showReport = false)}>Close</button>
+        <button class="btn btn-sm btn-primary" onclick={copyReport}>
+          {copied ? "Copied!" : "Copy"}
+        </button>
+      </div>
+    </div>
+  </div>
 {/if}
 
 {#if confirmDeleteId !== null}
@@ -564,5 +633,53 @@
     background: color-mix(in srgb, var(--danger) 80%, transparent);
     color: white;
     border-color: color-mix(in srgb, var(--danger) 80%, transparent);
+  }
+
+  .report-modal {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    width: 340px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .report-header {
+    display: flex;
+    align-items: center;
+  }
+
+  .report-title {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .report-textarea {
+    width: 100%;
+    min-height: 200px;
+    max-height: 350px;
+    padding: 8px;
+    font-size: 11px;
+    font-family: monospace;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    color: var(--text);
+    resize: vertical;
+    line-height: 1.5;
+  }
+
+  .report-textarea:focus {
+    outline: 1px solid var(--accent);
+    border-color: var(--accent);
+  }
+
+  .report-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
   }
 </style>
