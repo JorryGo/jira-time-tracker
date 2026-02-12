@@ -2034,6 +2034,7 @@ dependencies = [
  "tauri-plugin-positioner",
  "thiserror 2.0.18",
  "tokio",
+ "windows",
 ]
 
 [[package]]

@@ -145,6 +145,22 @@ pub fn run() {
                                 }
                                 let _ = window.show();
                                 let _ = window.set_focus();
+
+                                // On Windows, explicitly call SetForegroundWindow + SetFocus
+                                // to ensure proper keyboard layout switching when showing from tray.
+                                // Tauri's set_focus() alone doesn't trigger full input locale activation.
+                                #[cfg(target_os = "windows")]
+                                {
+                                    use windows::Win32::UI::WindowsAndMessaging::{
+                                        SetForegroundWindow, SetFocus,
+                                    };
+                                    if let Ok(hwnd) = window.hwnd() {
+                                        unsafe {
+                                            let _ = SetForegroundWindow(hwnd);
+                                            let _ = SetFocus(Some(hwnd));
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -182,11 +198,10 @@ pub fn run() {
                                 });
                             }
                         }
-                        // Debounce hide — on Windows startDragging() and keyboard layout
-                        // switches briefly lose focus
+                        // Debounce hide — on Windows startDragging() briefly loses focus
                         let window_clone = window.clone();
                         tauri::async_runtime::spawn(async move {
-                            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
                             if !window_clone.is_focused().unwrap_or(true) {
                                 let _ = window_clone.hide();
                             }
