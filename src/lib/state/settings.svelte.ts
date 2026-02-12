@@ -1,5 +1,6 @@
 import { loadJiraConfig, saveJiraConfig, settingsGet, settingsSet } from "../commands/settings";
 import { testConnection } from "../commands/jira";
+import { timerUpdateTray } from "../commands/timer";
 
 const DEFAULT_HIDDEN_STATUSES = ["Done", "Canceled"];
 
@@ -10,6 +11,7 @@ class SettingsStore {
   isConnected = $state(false);
   userName = $state("");
   hiddenStatuses = $state<string[]>(DEFAULT_HIDDEN_STATUSES);
+  showTrayTitle = $state(true);
 
   async init() {
     const config = await loadJiraConfig();
@@ -29,6 +31,9 @@ class SettingsStore {
         // keep default
       }
     }
+
+    const trayTitle = await settingsGet("show_tray_title");
+    if (trayTitle !== null) this.showTrayTitle = trayTitle !== "false";
   }
 
   async testAndSave(baseUrl: string, email: string, apiToken: string): Promise<string> {
@@ -49,6 +54,12 @@ class SettingsStore {
   async saveHiddenStatuses(statuses: string[]) {
     this.hiddenStatuses = statuses;
     await settingsSet("hidden_statuses", JSON.stringify(statuses));
+  }
+
+  async toggleTrayTitle(enabled: boolean) {
+    this.showTrayTitle = enabled;
+    await settingsSet("show_tray_title", String(enabled));
+    if (!enabled) await timerUpdateTray("");
   }
 }
 

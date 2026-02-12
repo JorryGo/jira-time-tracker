@@ -207,6 +207,18 @@
     </div>
   </section>
 
+  <section>
+    <h3>Appearance</h3>
+    <label class="checkbox-row">
+      <input
+        type="checkbox"
+        checked={settingsStore.showTrayTitle}
+        onchange={(e) => settingsStore.toggleTrayTitle((e.target as HTMLInputElement).checked)}
+      />
+      Show task in menu bar
+    </label>
+  </section>
+
   {#if message}
     <div class="message" class:error={messageType === "error"} class:success={messageType === "success"}>
       {message}
@@ -406,5 +418,19 @@
     flex: 1;
     font-size: 12px;
     padding: 4px 8px;
+  }
+
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+
+  .checkbox-row input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+    cursor: pointer;
   }
 </style>

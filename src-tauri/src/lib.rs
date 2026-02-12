@@ -126,17 +126,14 @@ pub fn run() {
                                     #[cfg(not(target_os = "macos"))]
                                     {
                                         if let Ok(win_size) = window.outer_size() {
-                                            let scale = window.scale_factor().unwrap_or(1.0);
-                                            let click =
-                                                _click_pos.to_physical::<f64>(scale);
                                             let win_w = win_size.width as f64;
                                             let win_h = win_size.height as f64;
-                                            let x = (click.x - win_w / 2.0) as i32;
+                                            let x = (_click_pos.x - win_w / 2.0) as i32;
                                             // Show above click if tray is at bottom, below if at top
-                                            let y = if click.y > win_h {
-                                                (click.y - win_h) as i32
+                                            let y = if _click_pos.y > win_h {
+                                                (_click_pos.y - win_h) as i32
                                             } else {
-                                                click.y as i32
+                                                _click_pos.y as i32
                                             };
                                             let _ = window.set_position(
                                                 tauri::Position::Physical(

@@ -1,6 +1,7 @@
 import * as cmd from "../commands/timer";
 import { formatDuration } from "../utils/format";
 import type { TimerState } from "../types/settings";
+import { settingsStore } from "./settings.svelte";
 
 class TimerStore {
   current = $state<TimerState | null>(null);
@@ -50,7 +51,9 @@ class TimerStore {
     this.current = await cmd.timerPause();
     this.stopTicking();
     this.recalcElapsed();
-    await cmd.timerUpdateTray(`${this.current.issue_key} ${formatDuration(this.elapsedSeconds)} ⏸`);
+    if (settingsStore.showTrayTitle) {
+      await cmd.timerUpdateTray(`${this.current.issue_key} ${formatDuration(this.elapsedSeconds)} ⏸`);
+    }
     cmd.timerSetTrayIcon("paused");
   }
 
@@ -75,7 +78,7 @@ class TimerStore {
     this.stopTicking();
     this.intervalId = window.setInterval(() => {
       this.recalcElapsed();
-      if (this.current) {
+      if (this.current && settingsStore.showTrayTitle) {
         cmd.timerUpdateTray(this.displayText);
       }
     }, 1000);
