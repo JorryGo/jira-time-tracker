@@ -28,6 +28,8 @@
   })());
   let saving = $state(false);
   let error = $state("");
+  // svelte-ignore state_referenced_locally
+  const isSynced = worklog.sync_status === "synced";
 
   let endTime = $derived((() => {
     const start = new Date(`${date}T${time}:00`);
@@ -45,7 +47,11 @@
     error = "";
     try {
       const startedAt = new Date(`${date}T${time}:00`).toISOString();
-      await worklogsStore.update(worklog.id, totalSeconds, description, startedAt);
+      if (isSynced) {
+        await worklogsStore.updateAndSync(worklog.id, totalSeconds, description, startedAt);
+      } else {
+        await worklogsStore.update(worklog.id, totalSeconds, description, startedAt);
+      }
       onClose();
     } catch (e) {
       error = String(e);
@@ -60,6 +66,10 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="modal" onmousedown={(e) => e.stopPropagation()}>
     <h3>Edit: {worklog.issue_key}</h3>
+
+    {#if isSynced}
+      <div class="sync-warning">Changes will be pushed to Jira</div>
+    {/if}
 
     <div class="field-row">
       <div class="field">
@@ -100,7 +110,7 @@
     <div class="actions">
       <button class="btn btn-secondary" onclick={onClose}>Cancel</button>
       <button class="btn btn-primary" onclick={handleSave} disabled={saving}>
-        {saving ? "Saving..." : "Save"}
+        {saving ? "Saving..." : isSynced ? "Save & Push" : "Save"}
       </button>
     </div>
   </div>
@@ -145,6 +155,15 @@
   .end-time-hint {
     font-size: 11px;
     color: var(--text-secondary);
+    margin-bottom: 10px;
+  }
+
+  .sync-warning {
+    background: rgba(255, 170, 0, 0.12);
+    color: #b8860b;
+    font-size: 11px;
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
     margin-bottom: 10px;
   }
 

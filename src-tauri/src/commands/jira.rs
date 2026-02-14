@@ -199,6 +199,60 @@ pub async fn jira_push_all_pending(
 }
 
 #[tauri::command]
+pub async fn jira_update_worklog(
+    state: State<'_, AppState>,
+    worklog_id: i64,
+    duration_seconds: Option<i64>,
+    description: Option<String>,
+    started_at: Option<String>,
+) -> Result<(), String> {
+    let client = get_client(&state)?;
+
+    let row: Option<(String, Option<String>, String, i64, String, String)> = sqlx::query_as(
+        "SELECT issue_key, jira_worklog_id, sync_status, duration_seconds, description, started_at FROM worklogs WHERE id = ?1",
+    )
+    .bind(worklog_id)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let (issue_key, jira_wl_id, sync_status, cur_duration, cur_description, cur_started_at) =
+        row.ok_or("Worklog not found")?;
+
+    if sync_status != "synced" {
+        return Err("Worklog is not synced to Jira".to_string());
+    }
+
+    let jira_id = jira_wl_id.ok_or("Worklog has no Jira worklog ID")?;
+
+    let final_duration = duration_seconds.unwrap_or(cur_duration);
+    let final_description = description.unwrap_or(cur_description);
+    let final_started_at = started_at.unwrap_or(cur_started_at);
+
+    let started_jira = format_for_jira(&final_started_at)?;
+
+    // Push to Jira first — if it fails, nothing changes locally
+    let resp = client
+        .update_worklog(&issue_key, &jira_id, final_duration, &started_jira, &final_description)
+        .await?;
+
+    // Update locally on success
+    sqlx::query(
+        "UPDATE worklogs SET duration_seconds = ?1, description = ?2, started_at = ?3, jira_worklog_id = ?4, jira_updated_at = datetime('now'), updated_at = datetime('now') WHERE id = ?5",
+    )
+    .bind(final_duration)
+    .bind(&final_description)
+    .bind(&final_started_at)
+    .bind(&resp.id)
+    .bind(worklog_id)
+    .execute(&state.db)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn jira_delete_worklog(
     state: State<'_, AppState>,
     worklog_id: i64,

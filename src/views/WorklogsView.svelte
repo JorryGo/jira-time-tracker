@@ -328,9 +328,7 @@
           {/if}
         </div>
         <div class="wl-actions">
-          {#if wl.sync_status !== "synced"}
-            <button class="btn-icon-sm btn-edit" onclick={() => (editingWorklog = wl)} title="Edit">✎</button>
-          {/if}
+          <button class="btn-icon-sm btn-edit" onclick={() => (editingWorklog = wl)} title="Edit">✎</button>
           <button class="btn-icon-sm btn-danger" onclick={() => handleDelete(wl.id, wl.sync_status === "synced")} title="Delete">✕</button>
         </div>
       </div>

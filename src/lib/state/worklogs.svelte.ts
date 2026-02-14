@@ -1,5 +1,5 @@
 import * as cmd from "../commands/worklogs";
-import { pushWorklog, pushAllPending, deleteJiraWorklog, importWorklogs } from "../commands/jira";
+import { pushWorklog, pushAllPending, updateJiraWorklog, deleteJiraWorklog, importWorklogs } from "../commands/jira";
 import type { Worklog, WorklogFilter, PushSummary, ImportSummary } from "../types/worklog";
 
 class WorklogsStore {
@@ -45,6 +45,16 @@ class WorklogsStore {
     startedAt?: string,
   ) {
     await cmd.updateWorklog(id, durationSeconds, description, startedAt);
+    await this.refresh();
+  }
+
+  async updateAndSync(
+    id: number,
+    durationSeconds?: number,
+    description?: string,
+    startedAt?: string,
+  ) {
+    await updateJiraWorklog(id, durationSeconds, description, startedAt);
     await this.refresh();
   }
 

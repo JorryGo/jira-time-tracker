@@ -29,6 +29,20 @@ export async function pushAllPending(date: string): Promise<PushSummary> {
   return invoke("jira_push_all_pending", { date });
 }
 
+export async function updateJiraWorklog(
+  worklogId: number,
+  durationSeconds?: number,
+  description?: string,
+  startedAt?: string,
+): Promise<void> {
+  return invoke("jira_update_worklog", {
+    worklogId,
+    durationSeconds,
+    description,
+    startedAt,
+  });
+}
+
 export async function deleteJiraWorklog(worklogId: number): Promise<void> {
   return invoke("jira_delete_worklog", { worklogId });
 }

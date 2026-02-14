@@ -112,6 +112,51 @@ impl JiraClient {
             .map_err(|e| format!("Failed to parse response: {}", e))
     }
 
+    pub async fn update_worklog(
+        &self,
+        issue_key: &str,
+        worklog_id: &str,
+        time_spent_seconds: i64,
+        started: &str,
+        comment: &str,
+    ) -> Result<JiraWorklogResponse, String> {
+        let mut body = serde_json::json!({
+            "timeSpentSeconds": time_spent_seconds,
+            "started": started,
+        });
+        if !comment.is_empty() {
+            body["comment"] = serde_json::json!({
+                "type": "doc",
+                "version": 1,
+                "content": [{
+                    "type": "paragraph",
+                    "content": [{
+                        "type": "text",
+                        "text": comment
+                    }]
+                }]
+            });
+        }
+
+        self.client
+            .put(format!(
+                "{}/rest/api/3/issue/{}/worklog/{}",
+                self.base_url, issue_key, worklog_id
+            ))
+            .header("Authorization", &self.auth_header)
+            .header("Accept", "application/json")
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| format!("Request failed: {}", e))?
+            .error_for_status()
+            .map_err(|e| format!("Jira API error: {}", e))?
+            .json::<JiraWorklogResponse>()
+            .await
+            .map_err(|e| format!("Failed to parse response: {}", e))
+    }
+
     pub async fn delete_worklog(
         &self,
         issue_key: &str,
