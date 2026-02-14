@@ -4,7 +4,9 @@
   import { formatDurationShort } from "../lib/utils/format";
   import { settingsStore } from "../lib/state/settings.svelte";
   import WorklogEditModal from "../components/WorklogEditModal.svelte";
-  import type { Worklog, WorklogFilter } from "../lib/types/worklog";
+  import AddWorklogModal from "../components/AddWorklogModal.svelte";
+  import { importWorklogs, pushAllPending } from "../lib/commands/jira";
+  import type { Worklog, WorklogFilter, ImportSummary, PushSummary } from "../lib/types/worklog";
 
   function toLocalDateStr(date: Date): string {
     const y = date.getFullYear();
@@ -29,6 +31,14 @@
     return date;
   }
 
+  function getFirstOfMonth(d: Date): Date {
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  }
+
+  function getLastOfMonth(d: Date): Date {
+    return new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  }
+
   function getDaysInRange(start: string, end: string): string[] {
     const result: string[] = [];
     const d = new Date(start + "T12:00:00");
@@ -41,6 +51,7 @@
   }
 
   // State
+  let viewMode = $state<"week" | "month">("week");
   let startDate = $state(toLocalDateStr(getMonday(new Date())));
   let endDate = $state(toLocalDateStr(getSunday(new Date())));
   let issueFilter = $state<string[]>([]);
@@ -52,6 +63,10 @@
   let issueSearchQuery = $state("");
   let showIssueDropdown = $state(false);
   let error = $state("");
+  let syncing = $state(false);
+  let pushing = $state(false);
+  let toast = $state("");
+  let toastTimeout: ReturnType<typeof setTimeout> | undefined;
   const todayStr = toLocalDateStr(new Date());
 
   // Derived
@@ -74,6 +89,10 @@
     })
   );
 
+  let pendingCount = $derived(
+    worklogs.filter(w => w.sync_status === "pending").length
+  );
+
   let days = $derived(getDaysInRange(startDate, endDate));
 
   let worklogsByDay = $derived.by(() => {
@@ -94,16 +113,30 @@
       const start = new Date(wl.started_at);
       const end = new Date(start.getTime() + wl.duration_seconds * 1000);
       const startH = start.getHours() + start.getMinutes() / 60;
-      const endH = end.getHours() + end.getMinutes() / 60;
+      // If worklog crosses midnight, clamp end to 24 (end of day)
+      const crossesMidnight = toLocalDateStr(end) !== toLocalDateStr(start);
+      const endH = crossesMidnight ? 24 : end.getHours() + end.getMinutes() / 60;
       if (startH < min) min = Math.floor(startH);
       if (endH > max) max = Math.ceil(endH);
     }
-    return { startHour: min, endHour: max };
+    return { startHour: min, endHour: Math.min(max, 24) };
   });
 
   let totalHours = $derived(timeRange.endHour - timeRange.startHour);
 
   let editingWorklog = $state<Worklog | null>(null);
+  let addingWorklog = $state<{ date: string; time: string } | null>(null);
+
+  function handleTrackClick(day: string, e: MouseEvent) {
+    const track = (e.currentTarget as HTMLElement);
+    const rect = track.getBoundingClientRect();
+    const xRatio = (e.clientX - rect.left) / rect.width;
+    const totalMinutes = xRatio * totalHours * 60;
+    const clickHour = timeRange.startHour + Math.floor(totalMinutes / 60);
+    const clickMin = Math.floor(totalMinutes % 60 / 15) * 15;
+    const timeStr = `${String(clickHour).padStart(2, "0")}:${String(clickMin).padStart(2, "0")}`;
+    addingWorklog = { date: day, time: timeStr };
+  }
 
   // Lane assignment for overlapping worklogs
   function assignLanes(wls: Worklog[]): { lanes: Map<number, number>; laneCount: number } {
@@ -155,7 +188,10 @@
     const startMinutes = (start.getHours() - timeRange.startHour) * 60 + start.getMinutes();
     const totalMinutes = totalHours * 60;
     const left = (startMinutes / totalMinutes) * 100;
-    const width = (wl.duration_seconds / 60 / totalMinutes) * 100;
+    // Clamp duration to end of day (midnight) if worklog crosses midnight
+    const maxDurationSeconds = (24 - start.getHours()) * 3600 - start.getMinutes() * 60 - start.getSeconds();
+    const clampedDuration = Math.min(wl.duration_seconds, maxDurationSeconds);
+    const width = (clampedDuration / 60 / totalMinutes) * 100;
     const hue = issueHue(wl.issue_key);
     const top = LANE_PAD + lane * (LANE_HEIGHT + LANE_GAP);
     return `left: ${left}%; width: ${Math.max(width, 0.5)}%; top: ${top}px; height: ${LANE_HEIGHT}px; --block-hue: ${hue};`;
@@ -211,19 +247,100 @@
     }
   }
 
-  async function shiftWeek(offset: number) {
-    const s = new Date(startDate + "T12:00:00");
-    s.setDate(s.getDate() + offset * 7);
-    startDate = toLocalDateStr(s);
-    const e = new Date(endDate + "T12:00:00");
-    e.setDate(e.getDate() + offset * 7);
-    endDate = toLocalDateStr(e);
+  function showToast(message: string, durationMs = 5000) {
+    if (toastTimeout) clearTimeout(toastTimeout);
+    toast = message;
+    toastTimeout = setTimeout(() => { toast = ""; }, durationMs);
+  }
+
+  async function handleSync() {
+    syncing = true;
+    const allDays = getDaysInRange(startDate, endDate);
+    const totals = { imported: 0, updated: 0, deleted: 0 };
+    const errors: string[] = [];
+
+    for (const day of allDays) {
+      try {
+        const result = await importWorklogs(day);
+        totals.imported += result.imported;
+        totals.updated += result.updated;
+        totals.deleted += result.deleted;
+      } catch (e) {
+        errors.push(`${day}: ${String(e)}`);
+      }
+    }
+
+    await loadWorklogs();
+    syncing = false;
+
+    let msg: string;
+    if (totals.imported === 0 && totals.updated === 0 && totals.deleted === 0 && errors.length === 0) {
+      msg = "Already up to date";
+    } else {
+      msg = `Imported: ${totals.imported}, Updated: ${totals.updated}, Deleted: ${totals.deleted}`;
+      if (errors.length > 0) {
+        msg += ` (${errors.length} day${errors.length > 1 ? "s" : ""} failed)`;
+      }
+    }
+    showToast(msg);
+  }
+
+  async function handlePushAll() {
+    pushing = true;
+    const allDays = getDaysInRange(startDate, endDate);
+    const totals = { total: 0, success: 0, failed: 0 };
+    const errors: string[] = [];
+
+    for (const day of allDays) {
+      try {
+        const result = await pushAllPending(day);
+        totals.total += result.total;
+        totals.success += result.success;
+        totals.failed += result.failed;
+        errors.push(...result.errors);
+      } catch (e) {
+        errors.push(`${day}: ${String(e)}`);
+      }
+    }
+
+    await loadWorklogs();
+    pushing = false;
+
+    let msg = `Pushed ${totals.success}/${totals.total}`;
+    if (totals.failed > 0) {
+      msg += `, ${totals.failed} failed`;
+    }
+    showToast(msg);
+  }
+
+  async function shiftPeriod(offset: number) {
+    if (viewMode === "month") {
+      const s = new Date(startDate + "T12:00:00");
+      s.setMonth(s.getMonth() + offset, 1);
+      startDate = toLocalDateStr(getFirstOfMonth(s));
+      endDate = toLocalDateStr(getLastOfMonth(s));
+    } else {
+      const s = new Date(startDate + "T12:00:00");
+      s.setDate(s.getDate() + offset * 7);
+      startDate = toLocalDateStr(s);
+      const e = new Date(endDate + "T12:00:00");
+      e.setDate(e.getDate() + offset * 7);
+      endDate = toLocalDateStr(e);
+    }
     await loadWorklogs();
   }
 
   async function goThisWeek() {
+    viewMode = "week";
     startDate = toLocalDateStr(getMonday(new Date()));
     endDate = toLocalDateStr(getSunday(new Date()));
+    await loadWorklogs();
+  }
+
+  async function goThisMonth() {
+    viewMode = "month";
+    startDate = toLocalDateStr(getFirstOfMonth(new Date()));
+    endDate = toLocalDateStr(getLastOfMonth(new Date()));
     await loadWorklogs();
   }
 
@@ -266,7 +383,7 @@
   }
 
   function handleWindowFocus() {
-    loadWorklogs();
+    if (!syncing && !pushing) loadWorklogs();
   }
 
   onMount(async () => {
@@ -277,16 +394,44 @@
 
   onDestroy(() => {
     window.removeEventListener("focus", handleWindowFocus);
+    if (toastTimeout) clearTimeout(toastTimeout);
   });
 </script>
 
 <div class="calendar-view">
   <div class="cal-header">
     <div class="cal-nav">
-      <button class="cal-btn" onclick={() => shiftWeek(-1)} title="Previous week">&#8592;</button>
+      <button class="cal-btn" onclick={() => shiftPeriod(-1)} title={viewMode === "month" ? "Previous month" : "Previous week"}>&#8592;</button>
       <span class="cal-range">{formatRangeLabel(startDate)} &mdash; {formatRangeLabel(endDate)}</span>
-      <button class="cal-btn" onclick={() => shiftWeek(1)} title="Next week">&#8594;</button>
-      <button class="cal-btn cal-today-btn" onclick={goThisWeek}>This Week</button>
+      <button class="cal-btn" onclick={() => shiftPeriod(1)} title={viewMode === "month" ? "Next month" : "Next week"}>&#8594;</button>
+      <button class="cal-btn cal-today-btn" class:cal-today-btn-active={viewMode === "week"} onclick={goThisWeek}>This Week</button>
+      <button class="cal-btn cal-today-btn" class:cal-today-btn-active={viewMode === "month"} onclick={goThisMonth}>This Month</button>
+      <div class="cal-nav-spacer"></div>
+      <span class="cal-sync-wrap">
+        <button
+          class="cal-btn cal-sync-btn"
+          onclick={handleSync}
+          disabled={syncing || pushing}
+          aria-label="Sync worklogs from Jira"
+        >
+          <svg class="sync-icon" class:spinning={syncing} xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.5 2v6h-6"/>
+            <path d="M2.5 22v-6h6"/>
+            <path d="M2.5 11.5a10 10 0 0 1 17.3-5.7L21.5 8"/>
+            <path d="M21.5 12.5a10 10 0 0 1-17.3 5.7L2.5 16"/>
+          </svg>
+        </button>
+        <span class="cal-sync-tip">Sync worklogs from Jira for the displayed period. Does not push pending local worklogs.</span>
+      </span>
+      {#if pendingCount > 0}
+        <button
+          class="cal-btn cal-push-btn"
+          onclick={handlePushAll}
+          disabled={pushing || syncing}
+        >
+          {pushing ? "Pushing..." : `Push ${pendingCount} pending`}
+        </button>
+      {/if}
     </div>
     <div class="cal-filters">
       <div class="cal-filter-group filter-issues">
@@ -343,6 +488,10 @@
     <div class="cal-error">{error}</div>
   {/if}
 
+  {#if toast}
+    <div class="cal-toast">{toast}</div>
+  {/if}
+
   <div class="cal-timeline">
     <div class="cal-row cal-hour-header">
       <div class="cal-day-label"></div>
@@ -365,7 +514,9 @@
         <div class="cal-day-label" class:today-label={today}>
           {formatDayLabel(day)}
         </div>
-        <div class="cal-track" style="min-height: {trackHeight(dayLanes.laneCount)}px">
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="cal-track" style="min-height: {trackHeight(dayLanes.laneCount)}px" onclick={(e) => { if (e.target === e.currentTarget) handleTrackClick(day, e); }}>
           {#each Array(totalHours + 1) as _, i}
             <div class="grid-line" style="left: {(i / totalHours) * 100}%"></div>
           {/each}
@@ -419,6 +570,17 @@
       worklog={editingWorklog}
       onClose={async () => {
         editingWorklog = null;
+        await loadWorklogs();
+      }}
+    />
+  {/if}
+
+  {#if addingWorklog}
+    <AddWorklogModal
+      selectedDate={addingWorklog.date}
+      selectedTime={addingWorklog.time}
+      onClose={async () => {
+        addingWorklog = null;
         await loadWorklogs();
       }}
     />
@@ -483,6 +645,13 @@
 
   .cal-today-btn:hover {
     background: color-mix(in srgb, var(--accent) 16%, transparent);
+  }
+
+  .cal-today-btn-active {
+    background: color-mix(in srgb, var(--accent) 18%, transparent);
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 600;
   }
 
   .cal-filters {
@@ -680,6 +849,7 @@
     flex: 1;
     position: relative;
     min-height: 40px;
+    cursor: cell;
   }
 
   .cal-day-total {
@@ -810,6 +980,88 @@
     color: var(--danger);
     background: color-mix(in srgb, var(--danger) 8%, transparent);
     border-bottom: 1px solid color-mix(in srgb, var(--danger) 20%, transparent);
+    flex-shrink: 0;
+  }
+
+  /* Sync & Push buttons */
+  .cal-nav-spacer {
+    flex: 1;
+  }
+
+  .cal-sync-wrap {
+    position: relative;
+    display: inline-flex;
+  }
+
+  .cal-sync-tip {
+    display: none;
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    width: 220px;
+    padding: 6px 10px;
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 30;
+    pointer-events: none;
+  }
+
+  .cal-sync-wrap:hover .cal-sync-tip {
+    display: block;
+  }
+
+  .cal-sync-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 8px;
+  }
+
+  .cal-sync-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .sync-icon {
+    display: block;
+  }
+
+  .sync-icon.spinning {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  .cal-push-btn {
+    background: var(--success);
+    color: white;
+    border-color: var(--success);
+    font-weight: 600;
+  }
+
+  .cal-push-btn:hover {
+    background: color-mix(in srgb, var(--success) 85%, black);
+  }
+
+  .cal-push-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .cal-toast {
+    padding: 6px 20px;
+    font-size: 11px;
+    text-align: center;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
   }
 
