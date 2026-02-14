@@ -3,8 +3,9 @@
   import { worklogsStore } from "../lib/state/worklogs.svelte";
   import WorklogEditModal from "../components/WorklogEditModal.svelte";
   import AddWorklogModal from "../components/AddWorklogModal.svelte";
-  import { formatDurationShort, formatTimeRange } from "../lib/utils/format";
+  import { formatDurationShort, formatTimeRange, formatTimeOpen } from "../lib/utils/format";
   import { settingsStore } from "../lib/state/settings.svelte";
+  import { timerStore } from "../lib/state/timer.svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import type { Worklog, WorklogFilter } from "../lib/types/worklog";
 
@@ -17,6 +18,8 @@
 
   let statusFilter = $state("all");
   let selectedDate = $state(toLocalDateStr(new Date()));
+  let isToday = $derived(selectedDate === toLocalDateStr(new Date()));
+  let showInProgress = $derived(isToday && timerStore.current !== null);
   let editingWorklog = $state<Worklog | null>(null);
   let showAddModal = $state(false);
   let pushingAll = $state(false);
@@ -40,6 +43,7 @@
 
   let totalSeconds = $derived(
     worklogsStore.items.reduce((sum, wl) => sum + wl.duration_seconds, 0)
+    + (showInProgress ? timerStore.elapsedSeconds : 0)
   );
 
   function buildFilter(): WorklogFilter {
@@ -88,6 +92,14 @@
 
   function generateReport(): string {
     const grouped = new Map<string, { summary: string | null; totalSeconds: number; descriptions: { text: string; seconds: number }[] }>();
+
+    if (showInProgress && timerStore.current) {
+      grouped.set(timerStore.current.issue_key, {
+        summary: timerStore.issueSummary || null,
+        totalSeconds: timerStore.elapsedSeconds,
+        descriptions: [{ text: "(in progress)", seconds: timerStore.elapsedSeconds }],
+      });
+    }
 
     for (const wl of sortedWorklogs) {
       let group = grouped.get(wl.issue_key);
@@ -204,7 +216,7 @@
         <option value="error">Error</option>
       </select>
       <button class="btn btn-sm" onclick={() => (showAddModal = true)}>+ Add</button>
-      {#if sortedWorklogs.length > 0}
+      {#if sortedWorklogs.length > 0 || showInProgress}
         <button class="btn btn-sm" onclick={openReport}>Report</button>
       {/if}
     </div>
@@ -240,6 +252,27 @@
   {/if}
 
   <div class="worklog-list">
+    {#if showInProgress && timerStore.current}
+      <div class="worklog-row in-progress-row">
+        <div class="checkbox-spacer"></div>
+        <div class="wl-info">
+          <div class="wl-header">
+            <button class="wl-key-link" onclick={() => openUrl(`${settingsStore.jiraBaseUrl}/browse/${timerStore.current!.issue_key}`)}>{timerStore.current.issue_key}</button>
+            <span class="wl-duration">{formatDurationShort(timerStore.elapsedSeconds)}</span>
+            <span class="badge badge-in-progress">
+              {timerStore.isPaused ? "paused" : "in progress"}
+            </span>
+          </div>
+          {#if timerStore.issueSummary}
+            <div class="wl-summary">{timerStore.issueSummary}</div>
+          {/if}
+          <div class="wl-meta">
+            <span>{formatTimeOpen(timerStore.elapsedSeconds)}</span>
+          </div>
+        </div>
+        <div class="wl-actions"></div>
+      </div>
+    {/if}
     {#each sortedWorklogs as wl (wl.id)}
       <div class="worklog-row">
         {#if wl.sync_status === "pending"}
@@ -277,7 +310,9 @@
         </div>
       </div>
     {:else}
-      <div class="empty-state">No work logs yet</div>
+      {#if !showInProgress}
+        <div class="empty-state">No work logs yet</div>
+      {/if}
     {/each}
   </div>
 </div>
@@ -528,6 +563,12 @@
   .badge-pending { background: color-mix(in srgb, var(--warning) 15%, transparent); color: var(--warning); }
   .badge-success { background: color-mix(in srgb, var(--success) 15%, transparent); color: var(--success); }
   .badge-error { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
+  .badge-in-progress { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
+
+  .in-progress-row {
+    border-left: 2px solid var(--accent);
+    padding-left: 6px;
+  }
 
   .wl-meta {
     font-size: 11px;

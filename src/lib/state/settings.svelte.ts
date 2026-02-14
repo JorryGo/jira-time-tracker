@@ -11,7 +11,7 @@ class SettingsStore {
   isConnected = $state(false);
   userName = $state("");
   hiddenStatuses = $state<string[]>(DEFAULT_HIDDEN_STATUSES);
-  showTrayTitle = $state(true);
+  showTrayTitle = $state(false);
 
   async init() {
     const config = await loadJiraConfig();

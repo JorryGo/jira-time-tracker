@@ -37,6 +37,14 @@ export function formatTimeRange(isoString: string, durationSeconds: number): str
   }
 }
 
+export function formatTimeOpen(elapsedSeconds: number): string {
+  const now = new Date();
+  const start = new Date(now.getTime() - elapsedSeconds * 1000);
+  const fmt = (d: Date) =>
+    `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  return `${fmt(start)} \u2013 now`;
+}
+
 export function formatDateTime(isoString: string): string {
   try {
     const d = new Date(isoString);
