@@ -14,10 +14,12 @@
   let {
     preselectedIssue = null,
     selectedDate = null,
+    selectedTime = null,
     onClose,
   }: {
     preselectedIssue?: JiraIssue | null;
     selectedDate?: string | null;
+    selectedTime?: string | null;
     onClose: () => void;
   } = $props();
 
@@ -30,7 +32,8 @@
   let description = $state("");
   // svelte-ignore state_referenced_locally
   let date = $state(selectedDate ?? toLocalDateStr(new Date()));
-  let time = $state((() => {
+  // svelte-ignore state_referenced_locally
+  let time = $state(selectedTime ?? (() => {
     const now = new Date();
     return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
   })());
