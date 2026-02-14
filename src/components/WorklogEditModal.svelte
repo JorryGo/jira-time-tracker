@@ -1,6 +1,8 @@
 <script lang="ts">
   import type { Worklog } from "../lib/types/worklog";
   import { worklogsStore } from "../lib/state/worklogs.svelte";
+  import { settingsStore } from "../lib/state/settings.svelte";
+  import { openUrl } from "@tauri-apps/plugin-opener";
 
   let {
     worklog,
@@ -68,7 +70,7 @@
 <div class="modal-overlay" onmousedown={onClose}>
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="modal" onmousedown={(e) => e.stopPropagation()}>
-    <h3>Edit: {worklog.issue_key}</h3>
+    <h3>Edit: <button class="issue-link" onclick={() => { if (settingsStore.jiraBaseUrl) openUrl(`${settingsStore.jiraBaseUrl}/browse/${worklog.issue_key}`); }}>{worklog.issue_key}</button></h3>
 
     {#if isSynced}
       <div class="sync-warning">Changes will be pushed to Jira</div>
@@ -140,6 +142,18 @@
   }
 
   h3 { margin-bottom: 12px; font-size: 14px; }
+
+  .issue-link {
+    color: var(--accent);
+    font-size: inherit;
+    font-weight: inherit;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  .issue-link:hover {
+    text-decoration: underline;
+  }
 
   .field { margin-bottom: 10px; }
 
