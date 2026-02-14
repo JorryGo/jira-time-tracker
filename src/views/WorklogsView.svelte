@@ -65,8 +65,8 @@
 
   let syncInterval: number | undefined;
 
-  onMount(() => {
-    refreshWorklogs();
+  onMount(async () => {
+    await refreshWorklogs();
     backgroundSync();
     syncInterval = window.setInterval(backgroundSync, 60_000);
   });
@@ -80,19 +80,19 @@
     await refreshWorklogs();
   }
 
-  function changeDate(offset: number) {
+  async function changeDate(offset: number) {
     const d = new Date(selectedDate + "T12:00:00");
     d.setDate(d.getDate() + offset);
     selectedDate = toLocalDateStr(d);
     worklogsStore.clearSelection();
-    refreshWorklogs();
+    await refreshWorklogs();
     backgroundSync();
   }
 
-  function goToToday() {
+  async function goToToday() {
     selectedDate = toLocalDateStr(new Date());
     worklogsStore.clearSelection();
-    refreshWorklogs();
+    await refreshWorklogs();
     backgroundSync();
   }
 
@@ -179,8 +179,8 @@
   async function backgroundSync() {
     try {
       await worklogsStore.importFromJira(selectedDate);
-    } catch {
-      // Silent background sync
+    } catch (e) {
+      console.warn("Background sync failed:", e);
     }
   }
 
@@ -282,7 +282,7 @@
         <div class="checkbox-spacer"></div>
         <div class="wl-info">
           <div class="wl-header">
-            <button class="wl-key-link" onclick={() => openUrl(`${settingsStore.jiraBaseUrl}/browse/${timerStore.current!.issue_key}`)}>{timerStore.current.issue_key}</button>
+            <button class="wl-key-link" onclick={() => openUrl(`${settingsStore.jiraBaseUrl}/browse/${timerStore.current?.issue_key}`)}>{timerStore.current?.issue_key}</button>
             <span class="wl-duration">{formatDurationShort(timerStore.elapsedSeconds)}</span>
             <span class="badge badge-in-progress">
               {timerStore.isPaused ? "paused" : "in progress"}

@@ -73,8 +73,10 @@ pub fn run() {
                 )
                 .fetch_optional(&pool)
                 .await
-                .ok()
-                .flatten()
+                .unwrap_or_else(|e| {
+                    eprintln!("Failed to read window position: {}", e);
+                    None
+                })
                 .and_then(|s| {
                     let mut parts = s.split(',');
                     let x = parts.next()?.parse::<i32>().ok()?;
@@ -115,7 +117,7 @@ pub fn run() {
                                     .state::<state::AppState>()
                                     .window_position
                                     .lock()
-                                    .unwrap();
+                                    .unwrap_or_else(|e| e.into_inner());
                                 if let Some((x, y)) = saved {
                                     let _ = window.set_position(tauri::Position::Physical(
                                         tauri::PhysicalPosition::new(x, y),
@@ -176,7 +178,7 @@ pub fn run() {
                 WindowEvent::Moved(pos) => {
                     if window.label() == "main" {
                         if let Some(app_state) = window.try_state::<state::AppState>() {
-                            *app_state.window_position.lock().unwrap() =
+                            *app_state.window_position.lock().unwrap_or_else(|e| e.into_inner()) =
                                 Some((pos.x, pos.y));
                         }
                     }
@@ -185,18 +187,21 @@ pub fn run() {
                     if window.label() == "main" {
                         // Persist position to SQLite
                         if let Some(app_state) = window.try_state::<state::AppState>() {
-                            let saved = *app_state.window_position.lock().unwrap();
+                            let saved = *app_state.window_position.lock().unwrap_or_else(|e| e.into_inner());
                             if let Some((x, y)) = saved {
                                 let db = app_state.db.clone();
                                 let val = format!("{},{}", x, y);
                                 tauri::async_runtime::spawn(async move {
-                                    let _ = sqlx::query(
+                                    if let Err(e) = sqlx::query(
                                         "INSERT INTO settings (key, value) VALUES ('window_position', ?1) \
                                          ON CONFLICT(key) DO UPDATE SET value = ?1",
                                     )
                                     .bind(val)
                                     .execute(&db)
-                                    .await;
+                                    .await
+                                    {
+                                        eprintln!("Failed to save window position: {}", e);
+                                    }
                                 });
                             }
                         }

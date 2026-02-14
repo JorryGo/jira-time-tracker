@@ -69,7 +69,7 @@ pub async fn settings_save_jira_config(
         .map_err(|e| e.to_string())?;
     }
 
-    *state.jira_config.lock().unwrap() = Some(JiraConfig {
+    *state.jira_config.lock().unwrap_or_else(|e| e.into_inner()) = Some(JiraConfig {
         base_url,
         email,
         api_token,
@@ -100,7 +100,7 @@ pub async fn settings_load_jira_config(
             email: map["jira_email"].clone(),
             api_token: map["jira_api_token"].clone(),
         };
-        *state.jira_config.lock().unwrap() = Some(config);
+        *state.jira_config.lock().unwrap_or_else(|e| e.into_inner()) = Some(config);
         map.insert("jira_api_token".to_string(), "***".to_string());
         Ok(Some(map))
     } else {

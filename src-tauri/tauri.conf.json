@@ -1,5 +1,5 @@
 {
-  "$schema": "https://raw.githubusercontent.com/nicegui-org/nicegui/main/tauri-conf-schema.json",
+  "$schema": "https://schema.tauri.app/config/2",
   "productName": "Jira Time Tracker",
   "version": "0.1.2",
   "identifier": "com.jira-time-tracker",

@@ -16,7 +16,7 @@ fn get_client(state: &AppState) -> Result<JiraClient, String> {
     let config = state
         .jira_config
         .lock()
-        .unwrap()
+        .unwrap_or_else(|e| e.into_inner())
         .clone()
         .ok_or_else(|| "Jira not configured. Go to Settings to set up connection.".to_string())?;
     Ok(JiraClient::new(
@@ -49,7 +49,7 @@ pub async fn jira_search_issues(
 
     // Cache issues locally
     for issue in &issues {
-        let _ = sqlx::query(
+        if let Err(e) = sqlx::query(
             "INSERT INTO issues (issue_key, summary, project_key, status, issue_type, updated_at) \
              VALUES (?1, ?2, ?3, ?4, ?5, datetime('now')) \
              ON CONFLICT(issue_key) DO UPDATE SET \
@@ -61,7 +61,10 @@ pub async fn jira_search_issues(
         .bind(&issue.status)
         .bind(&issue.issue_type)
         .execute(&state.db)
-        .await;
+        .await
+        {
+            eprintln!("Failed to cache issue {}: {}", issue.issue_key, e);
+        }
     }
 
     Ok(issues)
@@ -167,23 +170,29 @@ pub async fn jira_push_all_pending(
                 .await
             {
                 Ok(resp) => {
-                    let _ = sqlx::query(
+                    if let Err(db_err) = sqlx::query(
                         "UPDATE worklogs SET sync_status = 'synced', jira_worklog_id = ?1, sync_error = NULL, updated_at = datetime('now') WHERE id = ?2",
                     )
                     .bind(&resp.id)
                     .bind(id)
                     .execute(&state.db)
-                    .await;
+                    .await
+                    {
+                        eprintln!("Failed to update worklog {} after push: {}", id, db_err);
+                    }
                     success += 1;
                 }
                 Err(e) => {
-                    let _ = sqlx::query(
+                    if let Err(db_err) = sqlx::query(
                         "UPDATE worklogs SET sync_status = 'error', sync_error = ?1, updated_at = datetime('now') WHERE id = ?2",
                     )
                     .bind(&e)
                     .bind(id)
                     .execute(&state.db)
-                    .await;
+                    .await
+                    {
+                        eprintln!("Failed to record sync error for worklog {}: {}", id, db_err);
+                    }
                     errors.push(format!("{}: {}", issue_key, e));
                 }
             }
@@ -372,7 +381,7 @@ pub async fn jira_import_worklogs(
             let description = entry
                 .comment
                 .as_ref()
-                .map(|c| extract_adf_text(c))
+                .map(extract_adf_text)
                 .unwrap_or_default();
 
             match existing_map.get(&entry.id) {

@@ -15,7 +15,7 @@ export function formatDurationShort(totalSeconds: number): string {
 export function formatDate(isoString: string): string {
   try {
     const d = new Date(isoString);
-    return d.toLocaleDateString("ru-RU", {
+    return d.toLocaleDateString(undefined, {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
@@ -48,7 +48,7 @@ export function formatTimeOpen(elapsedSeconds: number): string {
 export function formatDateTime(isoString: string): string {
   try {
     const d = new Date(isoString);
-    return d.toLocaleString("ru-RU", {
+    return d.toLocaleString(undefined, {
       day: "2-digit",
       month: "2-digit",
       hour: "2-digit",

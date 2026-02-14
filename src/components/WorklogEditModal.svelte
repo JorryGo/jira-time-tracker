@@ -34,7 +34,10 @@
   let endTime = $derived((() => {
     const start = new Date(`${date}T${time}:00`);
     const end = new Date(start.getTime() + (hours * 3600 + minutes * 60) * 1000);
-    return `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`;
+    const hh = String(end.getHours()).padStart(2, "0");
+    const mm = String(end.getMinutes()).padStart(2, "0");
+    const dayDiff = Math.floor((end.getTime() - start.getTime()) / 86_400_000);
+    return dayDiff > 0 ? `${hh}:${mm} +${dayDiff}d` : `${hh}:${mm}`;
   })());
 
   async function handleSave() {
