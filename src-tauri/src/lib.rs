@@ -42,6 +42,8 @@ pub fn run() {
             commands::worklogs::update_worklog,
             commands::worklogs::delete_worklog,
             commands::quit_app,
+            commands::set_dock_visible,
+            commands::focus_calendar,
         ])
         .setup(|app| {
             // Hide dock icon on macOS — pure menubar app
@@ -213,6 +215,14 @@ pub fn run() {
                                 let _ = window_clone.hide();
                             }
                         });
+                    }
+                }
+                WindowEvent::Destroyed => {
+                    #[cfg(target_os = "macos")]
+                    if window.label() == "calendar" {
+                        let _ = window
+                            .app_handle()
+                            .set_activation_policy(tauri::ActivationPolicy::Accessory);
                     }
                 }
                 _ => {}

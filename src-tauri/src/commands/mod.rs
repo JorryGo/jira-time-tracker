@@ -26,3 +26,28 @@ pub async fn quit_app(app: tauri::AppHandle) {
     }
     app.exit(0);
 }
+
+#[tauri::command]
+pub fn set_dock_visible(_app: tauri::AppHandle, visible: bool) {
+    #[cfg(target_os = "macos")]
+    {
+        if visible {
+            let _ = _app.set_activation_policy(tauri::ActivationPolicy::Regular);
+        } else {
+            let _ = _app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+        }
+    }
+    let _ = visible;
+}
+
+#[tauri::command]
+pub fn focus_calendar(app: tauri::AppHandle) -> bool {
+    if let Some(window) = app.get_webview_window("calendar") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+        true
+    } else {
+        false
+    }
+}

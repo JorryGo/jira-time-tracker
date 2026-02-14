@@ -4,6 +4,9 @@
   import TasksView from "./views/TasksView.svelte";
   import WorklogsView from "./views/WorklogsView.svelte";
   import SettingsView from "./views/SettingsView.svelte";
+  import CalendarView from "./views/CalendarView.svelte";
+
+  const isCalendarWindow = new URLSearchParams(window.location.search).get("view") === "calendar";
 
   let activeTab = $state<"tasks" | "worklogs" | "settings">("tasks");
   let showQuitConfirm = $state(false);
@@ -14,6 +17,9 @@
   }
 </script>
 
+{#if isCalendarWindow}
+  <CalendarView />
+{:else}
 <div class="app">
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="tabs" onmousedown={handleDrag}>
@@ -58,6 +64,7 @@
       </div>
     </div>
   </div>
+{/if}
 {/if}
 
 <style>

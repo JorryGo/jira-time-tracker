@@ -7,6 +7,8 @@
   import { settingsStore } from "../lib/state/settings.svelte";
   import { timerStore } from "../lib/state/timer.svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
+  import { invoke } from "@tauri-apps/api/core";
+  import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
   import type { Worklog, WorklogFilter } from "../lib/types/worklog";
 
   function toLocalDateStr(date: Date): string {
@@ -215,10 +217,40 @@
     if (status === "error") return "badge-error";
     return "badge-pending";
   }
+
+  async function openCalendar() {
+    try {
+      await invoke("set_dock_visible", { visible: true });
+      const found: boolean = await invoke("focus_calendar");
+      if (found) return;
+      new WebviewWindow("calendar", {
+        url: "index.html?view=calendar",
+        title: "Calendar — Jira Time Tracker",
+        width: 900,
+        height: 600,
+        decorations: true,
+        alwaysOnTop: false,
+        resizable: true,
+        skipTaskbar: false,
+        visible: true,
+        center: true,
+      });
+    } catch (e) {
+      console.error("Failed to open calendar:", e);
+    }
+  }
 </script>
 
 <div class="worklogs-view">
   <div class="date-bar">
+    <button class="date-calendar" onclick={openCalendar} title="Calendar view">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+        <line x1="16" y1="2" x2="16" y2="6"></line>
+        <line x1="8" y1="2" x2="8" y2="6"></line>
+        <line x1="3" y1="10" x2="21" y2="10"></line>
+      </svg>
+    </button>
     <button class="btn btn-sm btn-nav" onclick={() => changeDate(-1)} title="Previous day">&#8592;</button>
     <input
       type="date"
@@ -404,6 +436,32 @@
     padding: 6px 12px;
     border-bottom: 1px solid var(--border);
     gap: 6px;
+    flex-shrink: 0;
+  }
+
+  .date-calendar {
+    position: absolute;
+    left: 12px;
+    width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .date-calendar:hover {
+    background: var(--border);
+    color: var(--text);
+  }
+
+  .date-calendar svg {
+    display: block;
     flex-shrink: 0;
   }
 

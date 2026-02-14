@@ -1,9 +1,12 @@
 {
   "identifier": "default",
-  "description": "Default capabilities for the main window",
-  "windows": ["main"],
+  "description": "Default capabilities for the main and calendar windows",
+  "windows": ["main", "calendar"],
   "permissions": [
     "core:default",
+    "core:window:allow-create",
+    "core:webview:allow-create-webview-window",
+    "core:window:allow-unminimize",
     "core:window:allow-start-dragging",
     "positioner:default",
     "opener:default"
