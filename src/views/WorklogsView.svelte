@@ -64,6 +64,7 @@
   });
 
   async function handleFilterChange() {
+    worklogsStore.clearSelection();
     await refreshWorklogs();
   }
 
@@ -71,11 +72,13 @@
     const d = new Date(selectedDate + "T12:00:00");
     d.setDate(d.getDate() + offset);
     selectedDate = toLocalDateStr(d);
+    worklogsStore.clearSelection();
     refreshWorklogs();
   }
 
   function goToToday() {
     selectedDate = toLocalDateStr(new Date());
+    worklogsStore.clearSelection();
     refreshWorklogs();
   }
 
