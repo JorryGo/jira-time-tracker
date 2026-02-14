@@ -62,24 +62,47 @@ jobs:
           npm version $VERSION --no-git-tag-version --allow-same-version
         shell: bash
 
-      - name: Build and release
+      - name: Build
         uses: tauri-apps/tauri-action@v0
+        id: tauri-build
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           args: ${{ matrix.args }}
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Jira Time Tracker ${{ github.ref_name }}'
-          releaseDraft: false
+
+      - name: Rename artifacts
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          ARTIFACT_DIR="src-tauri/target/${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin/' || '' }}release/bundle"
+          PREFIX="Jira-Time-Tracker-${VERSION}"
+          mkdir -p artifacts
+
+          if [ "${{ matrix.platform }}" = "macos-latest" ]; then
+            cp "${ARTIFACT_DIR}/dmg/"*.dmg "artifacts/${PREFIX}-macOS-arm64.dmg"
+          elif [ "${{ matrix.platform }}" = "ubuntu-22.04" ]; then
+            cp ${ARTIFACT_DIR}/deb/*.deb "artifacts/${PREFIX}-Linux-x64.deb"
+            cp ${ARTIFACT_DIR}/appimage/*.AppImage "artifacts/${PREFIX}-Linux-x64.AppImage"
+          elif [ "${{ matrix.platform }}" = "windows-latest" ]; then
+            cp "${ARTIFACT_DIR}/nsis/"*.exe "artifacts/${PREFIX}-Windows-x64-setup.exe"
+          fi
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: 'Jira Time Tracker ${{ github.ref_name }}'
+          draft: false
           prerelease: false
-          releaseBody: |
+          files: artifacts/*
+          body: |
             ## Installation
 
-            **macOS**: After downloading the `.dmg`, if you see "is damaged and can't be opened", run:
+            **macOS** (`-macOS-arm64.dmg`): After downloading, if you see "is damaged and can't be opened", run:
             ```
             xattr -cr /Applications/Jira\ Time\ Tracker.app
             ```
 
-            **Windows**: Run the `.exe` installer.
+            **Windows** (`-Windows-x64-setup.exe`): Run the installer.
 
-            **Linux**: Use `.deb` or `.AppImage`.
+            **Linux** (`-Linux-x64.deb` / `.AppImage`): Use deb package or AppImage.
