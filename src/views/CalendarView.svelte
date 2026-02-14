@@ -606,6 +606,8 @@
     background: var(--bg-glass);
     backdrop-filter: blur(16px) saturate(180%);
     -webkit-backdrop-filter: blur(16px) saturate(180%);
+    position: relative;
+    z-index: 10;
   }
 
   .cal-nav {
