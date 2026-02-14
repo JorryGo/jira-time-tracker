@@ -29,7 +29,7 @@
   --transition-normal: 0.2s ease;
   --transition-slow: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
-  --font-mono: 'SF Mono', 'JetBrains Mono', 'Menlo', monospace;
+  --font-mono: 'JetBrains Mono', 'SF Mono', 'Menlo', 'Consolas', monospace;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -69,7 +69,7 @@ html, body, #app {
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'SF Pro Text', 'Helvetica Neue', sans-serif;
   font-size: 13px;
   line-height: 1.4;
   color: var(--text);
