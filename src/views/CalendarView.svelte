@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { getWorklogs } from "../lib/commands/worklogs";
   import { formatDurationShort } from "../lib/utils/format";
-  import { openUrl } from "@tauri-apps/plugin-opener";
   import { settingsStore } from "../lib/state/settings.svelte";
+  import WorklogEditModal from "../components/WorklogEditModal.svelte";
   import type { Worklog, WorklogFilter } from "../lib/types/worklog";
 
   function toLocalDateStr(date: Date): string {
@@ -103,6 +103,40 @@
 
   let totalHours = $derived(timeRange.endHour - timeRange.startHour);
 
+  let editingWorklog = $state<Worklog | null>(null);
+
+  // Lane assignment for overlapping worklogs
+  function assignLanes(wls: Worklog[]): { lanes: Map<number, number>; laneCount: number } {
+    const sorted = [...wls].sort((a, b) => new Date(a.started_at).getTime() - new Date(b.started_at).getTime());
+    const lanes = new Map<number, number>();
+    const laneEnds: number[] = []; // end timestamp per lane
+    for (const wl of sorted) {
+      const start = new Date(wl.started_at).getTime();
+      let placed = false;
+      for (let i = 0; i < laneEnds.length; i++) {
+        if (start >= laneEnds[i]) {
+          lanes.set(wl.id, i);
+          laneEnds[i] = start + wl.duration_seconds * 1000;
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) {
+        lanes.set(wl.id, laneEnds.length);
+        laneEnds.push(start + wl.duration_seconds * 1000);
+      }
+    }
+    return { lanes, laneCount: Math.max(laneEnds.length, 1) };
+  }
+
+  let worklogLanes = $derived.by(() => {
+    const result = new Map<string, { lanes: Map<number, number>; laneCount: number }>();
+    for (const [day, wls] of worklogsByDay) {
+      result.set(day, assignLanes(wls));
+    }
+    return result;
+  });
+
   // Color from issue key hash
   function issueHue(key: string): number {
     let hash = 0;
@@ -112,14 +146,23 @@
     return Math.abs(hash) % 360;
   }
 
-  function blockStyle(wl: Worklog): string {
+  const LANE_HEIGHT = 28;
+  const LANE_GAP = 4;
+  const LANE_PAD = 6;
+
+  function blockStyle(wl: Worklog, lane: number, laneCount: number): string {
     const start = new Date(wl.started_at);
     const startMinutes = (start.getHours() - timeRange.startHour) * 60 + start.getMinutes();
     const totalMinutes = totalHours * 60;
     const left = (startMinutes / totalMinutes) * 100;
     const width = (wl.duration_seconds / 60 / totalMinutes) * 100;
     const hue = issueHue(wl.issue_key);
-    return `left: ${left}%; width: ${Math.max(width, 0.5)}%; --block-hue: ${hue};`;
+    const top = LANE_PAD + lane * (LANE_HEIGHT + LANE_GAP);
+    return `left: ${left}%; width: ${Math.max(width, 0.5)}%; top: ${top}px; height: ${LANE_HEIGHT}px; --block-hue: ${hue};`;
+  }
+
+  function trackHeight(laneCount: number): number {
+    return LANE_PAD * 2 + laneCount * LANE_HEIGHT + (laneCount - 1) * LANE_GAP;
   }
 
   function formatDayLabel(dateStr: string): string {
@@ -222,9 +265,18 @@
     return d.getDay() === 0 || d.getDay() === 6;
   }
 
+  function handleWindowFocus() {
+    loadWorklogs();
+  }
+
   onMount(async () => {
     await settingsStore.init();
     await loadWorklogs();
+    window.addEventListener("focus", handleWindowFocus);
+  });
+
+  onDestroy(() => {
+    window.removeEventListener("focus", handleWindowFocus);
   });
 </script>
 
@@ -238,7 +290,7 @@
     </div>
     <div class="cal-filters">
       <div class="cal-filter-group filter-issues">
-        <label>Tasks</label>
+        <label for="cal-issue-filter">Tasks</label>
         <div class="issue-filter-box">
           {#each issueFilter as key}
             <span class="issue-tag" style="--tag-hue: {issueHue(key)}">
@@ -247,6 +299,7 @@
             </span>
           {/each}
           <input
+            id="cal-issue-filter"
             type="text"
             class="issue-filter-input"
             placeholder={issueFilter.length ? "" : "Filter issues..."}
@@ -267,8 +320,8 @@
         </div>
       </div>
       <div class="cal-filter-group">
-        <label>Status</label>
-        <select bind:value={statusFilter}>
+        <label for="cal-status-filter">Status</label>
+        <select id="cal-status-filter" bind:value={statusFilter}>
           <option value="all">All</option>
           <option value="pending">Pending</option>
           <option value="synced">Synced</option>
@@ -276,12 +329,12 @@
         </select>
       </div>
       <div class="cal-filter-group">
-        <label>From</label>
-        <input type="date" bind:value={startDate} onchange={() => loadWorklogs()} />
+        <label for="cal-date-from">From</label>
+        <input id="cal-date-from" type="date" bind:value={startDate} onchange={() => loadWorklogs()} />
       </div>
       <div class="cal-filter-group">
-        <label>To</label>
-        <input type="date" bind:value={endDate} onchange={() => loadWorklogs()} />
+        <label for="cal-date-to">To</label>
+        <input id="cal-date-to" type="date" bind:value={endDate} onchange={() => loadWorklogs()} />
       </div>
     </div>
   </div>
@@ -305,32 +358,28 @@
 
     {#each days as day}
       {@const dayWls = worklogsByDay.get(day) ?? []}
+      {@const dayLanes = worklogLanes.get(day) ?? { lanes: new Map(), laneCount: 1 }}
       {@const today = day === todayStr}
       {@const weekend = isWeekend(day)}
       <div class="cal-row" class:cal-row-today={today} class:cal-row-weekend={weekend}>
         <div class="cal-day-label" class:today-label={today}>
           {formatDayLabel(day)}
         </div>
-        <div class="cal-track">
+        <div class="cal-track" style="min-height: {trackHeight(dayLanes.laneCount)}px">
           {#each Array(totalHours + 1) as _, i}
             <div class="grid-line" style="left: {(i / totalHours) * 100}%"></div>
           {/each}
           {#each dayWls as wl}
-            <!-- svelte-ignore a11y_no_static_element_interactions -->
-            <div
+            <button
               class="wl-block"
-              style={blockStyle(wl)}
+              style={blockStyle(wl, dayLanes.lanes.get(wl.id) ?? 0, dayLanes.laneCount)}
               onmouseenter={(e) => handleBlockHover(wl, e)}
               onmousemove={(e) => { tooltipPos = clampTooltip(e.clientX, e.clientY); }}
               onmouseleave={handleBlockLeave}
-              onclick={() => {
-                if (settingsStore.jiraBaseUrl) {
-                  openUrl(`${settingsStore.jiraBaseUrl}/browse/${wl.issue_key}`);
-                }
-              }}
+              onclick={() => { editingWorklog = wl; }}
             >
               <span class="block-label">{wl.issue_key}</span>
-            </div>
+            </button>
           {/each}
         </div>
         <div class="cal-day-total">
@@ -363,6 +412,16 @@
 
   {#if loading}
     <div class="cal-loading">Loading...</div>
+  {/if}
+
+  {#if editingWorklog}
+    <WorklogEditModal
+      worklog={editingWorklog}
+      onClose={async () => {
+        editingWorklog = null;
+        await loadWorklogs();
+      }}
+    />
   {/if}
 </div>
 
@@ -657,8 +716,7 @@
   /* Worklog blocks */
   .wl-block {
     position: absolute;
-    top: 6px;
-    bottom: 6px;
+    border: none;
     border-radius: 4px;
     cursor: pointer;
     overflow: hidden;
@@ -670,6 +728,8 @@
     transition: filter 0.1s, box-shadow 0.1s;
     z-index: 1;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+    font: inherit;
+    text-align: left;
   }
 
   .wl-block:hover {
