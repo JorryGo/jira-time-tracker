@@ -69,3 +69,25 @@ impl From<JiraIssueRaw> for JiraIssue {
 pub struct JiraWorklogResponse {
     pub id: String,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct JiraWorklogListResponse {
+    pub worklogs: Vec<JiraWorklogEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct JiraWorklogEntry {
+    pub id: String,
+    pub started: String,
+    pub updated: String,
+    #[serde(rename = "timeSpentSeconds")]
+    pub time_spent_seconds: i64,
+    pub comment: Option<serde_json::Value>,
+    pub author: JiraWorklogAuthor,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct JiraWorklogAuthor {
+    #[serde(rename = "accountId")]
+    pub account_id: String,
+}

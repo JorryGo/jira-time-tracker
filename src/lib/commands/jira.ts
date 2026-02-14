@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { JiraIssue, JiraUser } from "../types/jira";
-import type { PushSummary } from "../types/worklog";
+import type { PushSummary, ImportSummary } from "../types/worklog";
 
 export async function testConnection(
   baseUrl: string,
@@ -27,4 +27,12 @@ export async function pushWorklog(worklogId: number): Promise<void> {
 
 export async function pushAllPending(date: string): Promise<PushSummary> {
   return invoke("jira_push_all_pending", { date });
+}
+
+export async function deleteJiraWorklog(worklogId: number): Promise<void> {
+  return invoke("jira_delete_worklog", { worklogId });
+}
+
+export async function importWorklogs(date: string): Promise<ImportSummary> {
+  return invoke("jira_import_worklogs", { date });
 }

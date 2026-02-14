@@ -54,5 +54,10 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         sqlx::query(idx).execute(pool).await?;
     }
 
+    // Add jira_updated_at column (migration)
+    let _ = sqlx::query("ALTER TABLE worklogs ADD COLUMN jira_updated_at TEXT")
+        .execute(pool)
+        .await;
+
     Ok(())
 }

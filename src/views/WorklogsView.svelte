@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { worklogsStore } from "../lib/state/worklogs.svelte";
   import WorklogEditModal from "../components/WorklogEditModal.svelte";
   import AddWorklogModal from "../components/AddWorklogModal.svelte";
@@ -63,8 +63,16 @@
     await worklogsStore.refresh(buildFilter());
   }
 
+  let syncInterval: number | undefined;
+
   onMount(() => {
     refreshWorklogs();
+    backgroundSync();
+    syncInterval = window.setInterval(backgroundSync, 60_000);
+  });
+
+  onDestroy(() => {
+    if (syncInterval !== undefined) clearInterval(syncInterval);
   });
 
   async function handleFilterChange() {
@@ -78,12 +86,14 @@
     selectedDate = toLocalDateStr(d);
     worklogsStore.clearSelection();
     refreshWorklogs();
+    backgroundSync();
   }
 
   function goToToday() {
     selectedDate = toLocalDateStr(new Date());
     worklogsStore.clearSelection();
     refreshWorklogs();
+    backgroundSync();
   }
 
   let showReport = $state(false);
@@ -142,20 +152,35 @@
   }
 
   let confirmDeleteId = $state<number | null>(null);
+  let confirmDeleteSynced = $state(false);
 
-  async function handleDelete(id: number) {
+  async function handleDelete(id: number, isSynced: boolean) {
     confirmDeleteId = id;
+    confirmDeleteSynced = isSynced;
   }
 
   async function confirmDelete() {
     if (confirmDeleteId === null) return;
     try {
-      await worklogsStore.remove(confirmDeleteId);
+      if (confirmDeleteSynced) {
+        await worklogsStore.removeFromJira(confirmDeleteId);
+      } else {
+        await worklogsStore.remove(confirmDeleteId);
+      }
     } catch (e) {
       toast = String(e);
       setTimeout(() => (toast = ""), 3000);
     } finally {
       confirmDeleteId = null;
+      confirmDeleteSynced = false;
+    }
+  }
+
+  async function backgroundSync() {
+    try {
+      await worklogsStore.importFromJira(selectedDate);
+    } catch {
+      // Silent background sync
     }
   }
 
@@ -305,8 +330,8 @@
         <div class="wl-actions">
           {#if wl.sync_status !== "synced"}
             <button class="btn-icon-sm btn-edit" onclick={() => (editingWorklog = wl)} title="Edit">✎</button>
-            <button class="btn-icon-sm btn-danger" onclick={() => handleDelete(wl.id)} title="Delete">✕</button>
           {/if}
+          <button class="btn-icon-sm btn-danger" onclick={() => handleDelete(wl.id, wl.sync_status === "synced")} title="Delete">✕</button>
         </div>
       </div>
     {:else}
@@ -352,7 +377,12 @@
   <div class="modal-overlay" onmousedown={() => (confirmDeleteId = null)}>
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="confirm-dialog" onmousedown={(e) => e.stopPropagation()}>
-      <p>Delete this entry?</p>
+      {#if confirmDeleteSynced}
+        <p>Delete this entry from Jira and locally?</p>
+        <p class="confirm-warning">This will also remove the worklog from Jira.</p>
+      {:else}
+        <p>Delete this entry?</p>
+      {/if}
       <div class="confirm-actions">
         <button class="btn btn-sm" onclick={() => (confirmDeleteId = null)}>Cancel</button>
         <button class="btn btn-sm btn-danger" onclick={confirmDelete}>Delete</button>
@@ -656,6 +686,12 @@
   .confirm-dialog p {
     margin-bottom: 12px;
     font-size: 13px;
+  }
+
+  .confirm-warning {
+    font-size: 11px;
+    color: var(--danger);
+    margin-top: -8px;
   }
 
   .confirm-actions {

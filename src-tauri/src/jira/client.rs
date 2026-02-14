@@ -111,4 +111,63 @@ impl JiraClient {
             .await
             .map_err(|e| format!("Failed to parse response: {}", e))
     }
+
+    pub async fn delete_worklog(
+        &self,
+        issue_key: &str,
+        worklog_id: &str,
+    ) -> Result<(), String> {
+        self.client
+            .delete(format!(
+                "{}/rest/api/3/issue/{}/worklog/{}",
+                self.base_url, issue_key, worklog_id
+            ))
+            .header("Authorization", &self.auth_header)
+            .header("Accept", "application/json")
+            .send()
+            .await
+            .map_err(|e| format!("Request failed: {}", e))?
+            .error_for_status()
+            .map_err(|e| format!("Jira API error: {}", e))?;
+        Ok(())
+    }
+
+    pub async fn get_worklogs(
+        &self,
+        issue_key: &str,
+    ) -> Result<JiraWorklogListResponse, String> {
+        self.client
+            .get(format!(
+                "{}/rest/api/3/issue/{}/worklog",
+                self.base_url, issue_key
+            ))
+            .header("Authorization", &self.auth_header)
+            .header("Accept", "application/json")
+            .send()
+            .await
+            .map_err(|e| format!("Request failed: {}", e))?
+            .error_for_status()
+            .map_err(|e| format!("Jira API error: {}", e))?
+            .json::<JiraWorklogListResponse>()
+            .await
+            .map_err(|e| format!("Failed to parse response: {}", e))
+    }
+}
+
+pub fn extract_adf_text(adf: &serde_json::Value) -> String {
+    let mut texts = Vec::new();
+    if let Some(content) = adf.get("content").and_then(|c| c.as_array()) {
+        for block in content {
+            if let Some(inner) = block.get("content").and_then(|c| c.as_array()) {
+                for node in inner {
+                    if node.get("type").and_then(|t| t.as_str()) == Some("text") {
+                        if let Some(text) = node.get("text").and_then(|t| t.as_str()) {
+                            texts.push(text.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    texts.join("")
 }

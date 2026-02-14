@@ -27,6 +27,8 @@ pub fn run() {
             commands::jira::jira_search_issues,
             commands::jira::jira_push_worklog,
             commands::jira::jira_push_all_pending,
+            commands::jira::jira_delete_worklog,
+            commands::jira::jira_import_worklogs,
             commands::timer::timer_start,
             commands::timer::timer_pause,
             commands::timer::timer_resume,

@@ -1,6 +1,6 @@
 import * as cmd from "../commands/worklogs";
-import { pushWorklog, pushAllPending } from "../commands/jira";
-import type { Worklog, WorklogFilter, PushSummary } from "../types/worklog";
+import { pushWorklog, pushAllPending, deleteJiraWorklog, importWorklogs } from "../commands/jira";
+import type { Worklog, WorklogFilter, PushSummary, ImportSummary } from "../types/worklog";
 
 class WorklogsStore {
   items = $state<Worklog[]>([]);
@@ -52,6 +52,18 @@ class WorklogsStore {
     await cmd.deleteWorklog(id);
     this.selectedIds.delete(id);
     await this.refresh();
+  }
+
+  async removeFromJira(id: number) {
+    await deleteJiraWorklog(id);
+    this.selectedIds.delete(id);
+    await this.refresh();
+  }
+
+  async importFromJira(date: string): Promise<ImportSummary> {
+    const result = await importWorklogs(date);
+    await this.refresh();
+    return result;
   }
 
   async pushSelected(): Promise<PushSummary> {

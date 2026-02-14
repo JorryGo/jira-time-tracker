@@ -31,3 +31,11 @@ export interface PushSummary {
   failed: number;
   errors: string[];
 }
+
+export interface ImportSummary {
+  imported: number;
+  updated: number;
+  deleted: number;
+  skipped: number;
+  issues_checked: number;
+}
