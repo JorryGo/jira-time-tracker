@@ -640,6 +640,13 @@
     background: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
   }
 
+  .worklog-row input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
   .checkbox-spacer {
     width: 16px;
     flex-shrink: 0;

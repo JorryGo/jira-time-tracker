@@ -29,6 +29,8 @@
     return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   })());
   let saving = $state(false);
+  let deleting = $state(false);
+  let confirmDelete = $state(false);
   let error = $state("");
   // svelte-ignore state_referenced_locally
   const isSynced = worklog.sync_status === "synced";
@@ -62,6 +64,24 @@
       error = String(e);
     } finally {
       saving = false;
+    }
+  }
+
+  async function handleDelete() {
+    deleting = true;
+    error = "";
+    try {
+      if (isSynced) {
+        await worklogsStore.removeFromJira(worklog.id);
+      } else {
+        await worklogsStore.remove(worklog.id);
+      }
+      onClose();
+    } catch (e) {
+      error = String(e);
+    } finally {
+      deleting = false;
+      confirmDelete = false;
     }
   }
 </script>
@@ -113,10 +133,21 @@
     {/if}
 
     <div class="actions">
-      <button class="btn btn-secondary" onclick={onClose}>Cancel</button>
-      <button class="btn btn-primary" onclick={handleSave} disabled={saving}>
-        {saving ? "Saving..." : isSynced ? "Save & Push" : "Save"}
-      </button>
+      {#if confirmDelete}
+        <span class="delete-confirm-text">{isSynced ? "Will also remove from Jira" : "Delete this entry?"}</span>
+        <button class="btn btn-secondary" onclick={() => (confirmDelete = false)} disabled={deleting}>Cancel</button>
+        <button class="btn btn-danger" onclick={handleDelete} disabled={deleting}>
+          {deleting ? "Deleting..." : "Delete"}
+        </button>
+      {:else}
+        <button class="btn btn-danger-ghost" onclick={() => (confirmDelete = true)}>Delete</button>
+        <div class="actions-right">
+          <button class="btn btn-secondary" onclick={onClose}>Cancel</button>
+          <button class="btn btn-primary" onclick={handleSave} disabled={saving}>
+            {saving ? "Saving..." : isSynced ? "Save & Push" : "Save"}
+          </button>
+        </div>
+      {/if}
     </div>
   </div>
 </div>
@@ -233,4 +264,35 @@
   .btn-primary:disabled { opacity: 0.5; transform: none; box-shadow: none; }
   .btn-secondary { background: var(--bg-secondary); border: 1px solid var(--border); }
   .btn-secondary:hover { background: var(--bg-tertiary); }
+
+  .btn-danger { background: var(--danger); color: white; }
+  .btn-danger:hover {
+    background: color-mix(in srgb, var(--danger) 85%, black);
+    transform: translateY(-0.5px);
+  }
+  .btn-danger:disabled { opacity: 0.5; transform: none; }
+
+  .btn-danger-ghost {
+    background: transparent;
+    color: var(--danger);
+    border: 1px solid transparent;
+  }
+  .btn-danger-ghost:hover {
+    background: color-mix(in srgb, var(--danger) 8%, transparent);
+    border-color: color-mix(in srgb, var(--danger) 20%, transparent);
+  }
+
+  .actions-right {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+  }
+
+  .delete-confirm-text {
+    font-size: 12px;
+    color: var(--danger);
+    font-weight: 500;
+    margin-right: auto;
+    align-self: center;
+  }
 </style>

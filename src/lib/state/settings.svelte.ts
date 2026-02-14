@@ -12,6 +12,7 @@ class SettingsStore {
   userName = $state("");
   hiddenStatuses = $state<string[]>(DEFAULT_HIDDEN_STATUSES);
   showTrayTitle = $state(false);
+  theme = $state<"system" | "light" | "dark">("system");
 
   async init() {
     const config = await loadJiraConfig();
@@ -34,6 +35,24 @@ class SettingsStore {
 
     const trayTitle = await settingsGet("show_tray_title");
     if (trayTitle !== null) this.showTrayTitle = trayTitle !== "false";
+
+    const theme = await settingsGet("theme");
+    if (theme === "light" || theme === "dark") this.theme = theme;
+    this.applyTheme();
+  }
+
+  applyTheme() {
+    if (this.theme === "system") {
+      document.documentElement.removeAttribute("data-theme");
+    } else {
+      document.documentElement.setAttribute("data-theme", this.theme);
+    }
+  }
+
+  async saveTheme(value: "system" | "light" | "dark") {
+    this.theme = value;
+    this.applyTheme();
+    await settingsSet("theme", value);
   }
 
   async testAndSave(baseUrl: string, email: string, apiToken: string): Promise<string> {

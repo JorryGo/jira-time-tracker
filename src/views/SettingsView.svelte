@@ -210,19 +210,36 @@
     </div>
   </section>
 
-  {#if isMac}
   <section>
     <h3>Appearance</h3>
-    <label class="checkbox-row">
-      <input
-        type="checkbox"
-        checked={settingsStore.showTrayTitle}
-        onchange={(e) => settingsStore.toggleTrayTitle((e.target as HTMLInputElement).checked)}
-      />
-      Show task in menu bar
-    </label>
+    <div class="theme-row">
+      <button
+        class="theme-option"
+        class:active={settingsStore.theme === "system"}
+        onclick={() => settingsStore.saveTheme("system")}
+      >System</button>
+      <button
+        class="theme-option"
+        class:active={settingsStore.theme === "light"}
+        onclick={() => settingsStore.saveTheme("light")}
+      >Light</button>
+      <button
+        class="theme-option"
+        class:active={settingsStore.theme === "dark"}
+        onclick={() => settingsStore.saveTheme("dark")}
+      >Dark</button>
+    </div>
+    {#if isMac}
+      <label class="checkbox-row">
+        <input
+          type="checkbox"
+          checked={settingsStore.showTrayTitle}
+          onchange={(e) => settingsStore.toggleTrayTitle((e.target as HTMLInputElement).checked)}
+        />
+        Show task in menu bar
+      </label>
+    {/if}
   </section>
-  {/if}
 
   {#if message}
     <div class="message" class:error={messageType === "error"} class:success={messageType === "success"}>
@@ -467,6 +484,38 @@
     font-size: 12px;
     padding: 4px 8px;
     background: var(--bg);
+  }
+
+  .theme-row {
+    display: flex;
+    background: color-mix(in srgb, var(--text) 6%, transparent);
+    border-radius: 8px;
+    padding: 2px;
+    gap: 2px;
+    margin-bottom: 10px;
+  }
+
+  .theme-option {
+    flex: 1;
+    padding: 6px 0;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+  }
+
+  .theme-option:hover {
+    color: var(--text);
+  }
+
+  .theme-option.active {
+    background: var(--bg);
+    color: var(--text);
+    box-shadow: var(--shadow-sm);
   }
 
   .checkbox-row {
