@@ -529,7 +529,7 @@
               onmouseleave={handleBlockLeave}
               onclick={() => { editingWorklog = wl; }}
             >
-              <span class="block-label">{wl.issue_key}</span>
+              <span class="block-key">{wl.issue_key}</span>{#if wl.issue_summary}<span class="block-summary">{wl.issue_summary}</span>{/if}
             </button>
           {/each}
         </div>
@@ -914,12 +914,22 @@
     }
   }
 
-  .block-label {
+  .block-key {
     font-size: 9px;
     font-weight: 700;
     white-space: nowrap;
+    flex-shrink: 0;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  }
+
+  .block-summary {
+    font-size: 9px;
+    font-weight: 400;
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    opacity: 0.8;
+    margin-left: 4px;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
   }
 
