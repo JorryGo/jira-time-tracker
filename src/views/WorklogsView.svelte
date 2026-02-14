@@ -317,6 +317,7 @@
             <button class="wl-key-link" onclick={() => openUrl(`${settingsStore.jiraBaseUrl}/browse/${timerStore.current?.issue_key}`)}>{timerStore.current?.issue_key}</button>
             <span class="wl-duration">{formatDurationShort(timerStore.elapsedSeconds)}</span>
             <span class="badge badge-in-progress">
+              <span class="badge-dot"></span>
               {timerStore.isPaused ? "paused" : "in progress"}
             </span>
           </div>
@@ -331,7 +332,8 @@
       </div>
     {/if}
     {#each sortedWorklogs as wl (wl.id)}
-      <div class="worklog-row">
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div class="worklog-row" onclick={(e) => { if (!(e.target as HTMLElement).closest('button, input, a')) editingWorklog = wl; }}>
         {#if wl.sync_status === "pending"}
           <input
             type="checkbox"
@@ -346,6 +348,7 @@
             <button class="wl-key-link" onclick={() => openUrl(`${settingsStore.jiraBaseUrl}/browse/${wl.issue_key}`)}>{wl.issue_key}</button>
             <span class="wl-duration">{formatDurationShort(wl.duration_seconds)}</span>
             <span class="badge {statusClass(wl.sync_status)}" title={wl.sync_error ?? ""}>
+              <span class="badge-dot"></span>
               {wl.sync_status}
             </span>
           </div>
@@ -433,10 +436,13 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 6px 12px;
-    border-bottom: 1px solid var(--border);
+    padding: 8px 12px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
     gap: 6px;
     flex-shrink: 0;
+    background: var(--bg-glass);
+    backdrop-filter: blur(12px) saturate(150%);
+    -webkit-backdrop-filter: blur(12px) saturate(150%);
   }
 
   .date-calendar {
@@ -448,16 +454,17 @@
     align-items: center;
     justify-content: center;
     border-radius: var(--radius-sm);
-    border: 1px solid var(--border);
-    background: var(--bg-secondary);
+    border: 1px solid transparent;
+    background: transparent;
     color: var(--text-secondary);
     cursor: pointer;
-    transition: all 0.15s;
+    transition: all var(--transition-fast);
   }
 
   .date-calendar:hover {
-    background: var(--border);
-    color: var(--text);
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
   }
 
   .date-calendar svg {
@@ -479,6 +486,7 @@
     background: transparent;
     cursor: pointer;
     color: var(--text);
+    transition: background var(--transition-fast);
   }
 
   .date-picker:hover {
@@ -489,14 +497,22 @@
     display: flex;
     align-items: center;
     padding: 6px 12px;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
     gap: 8px;
     flex-shrink: 0;
+    background: var(--bg-glass);
+    backdrop-filter: blur(12px) saturate(150%);
+    -webkit-backdrop-filter: blur(12px) saturate(150%);
   }
 
   .toolbar select {
-    padding: 4px 8px;
+    padding: 3px 8px;
     font-size: 11px;
+    height: 26px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    color: var(--text);
   }
 
   .toolbar-left {
@@ -521,34 +537,48 @@
     justify-content: center;
     font-size: 14px;
     font-weight: 600;
+    border-radius: 50%;
+  }
+
+  .btn-nav:hover {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
   }
 
   .summary-bar {
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 4px 12px;
-    background: var(--bg-secondary);
-    border-bottom: 1px solid var(--border);
+    padding: 5px 12px;
+    background: var(--accent-gradient);
+    color: white;
     font-size: 12px;
     flex-shrink: 0;
   }
 
   .total-label {
-    color: var(--text-secondary);
+    opacity: 0.8;
   }
 
   .total-value {
-    font-weight: 600;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    letter-spacing: 0.3px;
   }
 
   .btn {
-    padding: 4px 10px;
+    padding: 5px 12px;
     border-radius: var(--radius-sm);
     font-size: 11px;
     font-weight: 500;
     border: 1px solid var(--border);
     background: var(--bg-secondary);
+    transition: all var(--transition-fast);
+  }
+
+  .btn:hover {
+    background: var(--bg-tertiary);
   }
 
   .btn-sm { font-size: 11px; }
@@ -559,20 +589,35 @@
     border-color: var(--accent);
   }
 
+  .btn-primary:hover {
+    background: var(--accent-hover);
+    transform: translateY(-0.5px);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 25%, transparent);
+  }
+
   .btn-accent {
     background: var(--success);
     color: white;
     border-color: var(--success);
   }
 
+  .btn-accent:hover {
+    background: color-mix(in srgb, var(--success) 85%, white);
+    transform: translateY(-0.5px);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--success) 25%, transparent);
+  }
+
   .btn:disabled { opacity: 0.5; }
 
   .toast {
-    padding: 6px 12px;
-    background: var(--bg-secondary);
+    padding: 8px 12px;
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
     font-size: 12px;
     text-align: center;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid color-mix(in srgb, var(--accent) 15%, transparent);
+    color: var(--accent);
+    font-weight: 500;
+    animation: slideDown 0.2s ease;
   }
 
   .worklog-list {
@@ -583,13 +628,16 @@
   .worklog-row {
     display: flex;
     align-items: flex-start;
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--border);
+    padding: 10px 12px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
     gap: 8px;
+    transition: all var(--transition-fast);
+    animation: slideUp 0.2s ease both;
+    cursor: pointer;
   }
 
   .worklog-row:hover {
-    background: var(--bg-secondary);
+    background: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
   }
 
   .checkbox-spacer {
@@ -618,10 +666,12 @@
     padding: 0;
     cursor: pointer;
     text-decoration: none;
+    transition: color var(--transition-fast);
   }
 
   .wl-key-link:hover {
     text-decoration: underline;
+    color: var(--accent-hover);
   }
 
   .wl-summary {
@@ -634,26 +684,40 @@
 
   .wl-duration {
     font-size: 12px;
-    font-weight: 500;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
   }
 
   .badge {
     font-size: 9px;
-    padding: 1px 5px;
-    border-radius: 3px;
+    padding: 1.5px 7px;
+    border-radius: 10px;
     text-transform: uppercase;
     font-weight: 600;
     letter-spacing: 0.3px;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
   }
 
-  .badge-pending { background: color-mix(in srgb, var(--warning) 15%, transparent); color: var(--warning); }
-  .badge-success { background: color-mix(in srgb, var(--success) 15%, transparent); color: var(--success); }
-  .badge-error { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }
-  .badge-in-progress { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
+  .badge-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .badge-pending { background: color-mix(in srgb, var(--warning) 12%, transparent); color: var(--warning); }
+  .badge-success { background: color-mix(in srgb, var(--success) 12%, transparent); color: var(--success); }
+  .badge-error { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); }
+  .badge-in-progress { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
 
   .in-progress-row {
-    border-left: 2px solid var(--accent);
-    padding-left: 6px;
+    border-left: 3px solid var(--accent);
+    padding-left: 9px;
+    background: color-mix(in srgb, var(--accent) 3%, transparent);
+    animation: borderPulse 2s ease-in-out infinite;
   }
 
   .wl-meta {
@@ -666,10 +730,11 @@
   .wl-desc {
     font-size: 11px;
     color: var(--text-secondary);
-    margin-top: 2px;
-    padding: 2px 6px;
-    background: var(--bg-secondary);
+    margin-top: 3px;
+    padding: 3px 8px;
+    background: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
     border-radius: var(--radius-sm);
+    border-left: 2px solid color-mix(in srgb, var(--border) 60%, transparent);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -683,15 +748,21 @@
   }
 
   .btn-icon-sm {
-    width: 22px;
-    height: 22px;
+    width: 26px;
+    height: 26px;
     border-radius: var(--radius-sm);
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    font-size: 11px;
+    background: transparent;
+    border: 1px solid transparent;
+    font-size: 14px;
     display: flex;
     align-items: center;
     justify-content: center;
+    opacity: 0;
+    transition: all var(--transition-fast);
+  }
+
+  .worklog-row:hover .btn-icon-sm {
+    opacity: 1;
   }
 
   .btn-edit {
@@ -709,39 +780,46 @@
   }
 
   .btn-danger:hover {
-    background: color-mix(in srgb, var(--danger) 80%, transparent);
-    border-color: color-mix(in srgb, var(--danger) 80%, transparent);
+    background: var(--danger);
+    border-color: var(--danger);
     color: white;
   }
 
   .empty-state {
     text-align: center;
-    padding: 40px 16px;
+    padding: 48px 16px;
     color: var(--text-secondary);
+    animation: fadeIn 0.3s ease;
+    font-weight: 500;
   }
 
   .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.4);
+    background: rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(8px) saturate(150%);
+    -webkit-backdrop-filter: blur(8px) saturate(150%);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 100;
+    animation: fadeIn 0.15s ease;
   }
 
   .confirm-dialog {
     background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 16px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: var(--shadow-modal);
     text-align: center;
+    animation: scaleIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .confirm-dialog p {
     margin-bottom: 12px;
     font-size: 13px;
+    font-weight: 500;
   }
 
   .confirm-warning {
@@ -757,21 +835,27 @@
   }
 
   .confirm-actions .btn-danger {
-    background: color-mix(in srgb, var(--danger) 80%, transparent);
+    background: var(--danger);
     color: white;
-    border-color: color-mix(in srgb, var(--danger) 80%, transparent);
+    border-color: var(--danger);
+  }
+
+  .confirm-actions .btn-danger:hover {
+    background: color-mix(in srgb, var(--danger) 85%, black);
+    transform: translateY(-0.5px);
   }
 
   .report-modal {
     background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 16px;
+    border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+    border-radius: 12px;
+    padding: 18px;
     width: 340px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    box-shadow: var(--shadow-modal);
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
+    animation: scaleIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .report-header {
@@ -788,20 +872,15 @@
     width: 100%;
     min-height: 200px;
     max-height: 350px;
-    padding: 8px;
+    padding: 10px;
     font-size: 11px;
-    font-family: monospace;
+    font-family: var(--font-mono);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     background: var(--bg-secondary);
     color: var(--text);
     resize: vertical;
     line-height: 1.5;
-  }
-
-  .report-textarea:focus {
-    outline: 1px solid var(--accent);
-    border-color: var(--accent);
   }
 
   .report-actions {

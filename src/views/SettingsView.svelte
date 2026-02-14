@@ -109,6 +109,7 @@
     <h3>Jira Connection</h3>
     {#if settingsStore.isConnected}
       <div class="connected-badge">
+        <span class="connected-dot"></span>
         Connected to {settingsStore.jiraBaseUrl}
       </div>
     {/if}
@@ -236,29 +237,47 @@
 
 <style>
   .settings-view {
-    padding: 12px;
+    padding: 14px;
     overflow-y: auto;
     height: 100%;
   }
 
   section {
-    margin-bottom: 20px;
+    margin-bottom: 18px;
+    padding: 14px;
+    background: var(--bg-secondary);
+    border-radius: var(--radius);
+    border: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
   }
 
   h3 {
     font-size: 13px;
     margin-bottom: 10px;
-    padding-bottom: 4px;
-    border-bottom: 1px solid var(--border);
+    padding-bottom: 6px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+    font-weight: 600;
   }
 
   .connected-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     font-size: 11px;
-    color: var(--success);
-    margin-bottom: 8px;
-    padding: 4px 8px;
-    background: color-mix(in srgb, var(--success) 10%, transparent);
+    color: var(--text);
+    margin-bottom: 10px;
+    padding: 6px 10px;
+    background: color-mix(in srgb, var(--success) 8%, transparent);
     border-radius: var(--radius-sm);
+    border: 1px solid color-mix(in srgb, var(--success) 15%, transparent);
+  }
+
+  .connected-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--success);
+    animation: pulse 2s ease-in-out infinite;
+    flex-shrink: 0;
   }
 
   .field {
@@ -267,14 +286,18 @@
 
   .field label {
     display: block;
-    font-size: 11px;
+    font-size: 10.5px;
     color: var(--text-secondary);
-    margin-bottom: 3px;
+    margin-bottom: 4px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
   }
 
   .field input,
   .field textarea {
     width: 100%;
+    background: var(--bg);
   }
 
   .field-hint {
@@ -305,6 +328,7 @@
     border-radius: var(--radius-sm);
     font-size: 12px;
     font-weight: 500;
+    transition: all var(--transition-fast);
   }
 
   .btn-primary {
@@ -314,15 +338,23 @@
 
   .btn-primary:hover {
     background: var(--accent-hover);
+    transform: translateY(-0.5px);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 25%, transparent);
   }
 
   .btn-primary:disabled {
     opacity: 0.5;
+    transform: none;
+    box-shadow: none;
   }
 
   .btn-secondary {
-    background: var(--bg-secondary);
+    background: var(--bg);
     border: 1px solid var(--border);
+  }
+
+  .btn-secondary:hover {
+    background: var(--bg-tertiary);
   }
 
   .message {
@@ -330,6 +362,7 @@
     border-radius: var(--radius-sm);
     font-size: 12px;
     margin-bottom: 12px;
+    animation: slideUp 0.2s ease;
   }
 
   .message.success {
@@ -346,6 +379,9 @@
     text-align: center;
     color: var(--text-secondary);
     font-size: 11px;
+    background: transparent;
+    border: none;
+    padding: 0;
   }
 
   .section-hint {
@@ -362,8 +398,14 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 4px 0;
-    border-bottom: 1px solid var(--border);
+    padding: 5px 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 30%, transparent);
+    transition: background var(--transition-fast);
+  }
+
+  .status-row:hover {
+    background: color-mix(in srgb, var(--bg) 50%, transparent);
+    border-radius: var(--radius-sm);
   }
 
   .status-rank {
@@ -387,20 +429,22 @@
   .btn-sm {
     width: 22px;
     height: 22px;
-    border-radius: 3px;
-    background: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
     border: 1px solid var(--border);
     font-size: 11px;
     display: flex;
     align-items: center;
     justify-content: center;
     color: var(--text-secondary);
+    transition: all var(--transition-fast);
   }
 
   .btn-sm:hover:not(:disabled) {
     background: var(--accent);
     color: white;
     border-color: var(--accent);
+    transform: scale(1.05);
   }
 
   .btn-sm:disabled {
@@ -422,6 +466,7 @@
     flex: 1;
     font-size: 12px;
     padding: 4px 8px;
+    background: var(--bg);
   }
 
   .checkbox-row {

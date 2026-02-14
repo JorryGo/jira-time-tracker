@@ -23,15 +23,17 @@
 <div class="app">
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="tabs" onmousedown={handleDrag}>
-    <button class="tab" class:active={activeTab === "tasks"} onclick={() => activeTab = "tasks"}>
-      Tasks
-    </button>
-    <button class="tab" class:active={activeTab === "worklogs"} onclick={() => activeTab = "worklogs"}>
-      Work Logs
-    </button>
-    <button class="tab" class:active={activeTab === "settings"} onclick={() => activeTab = "settings"}>
-      Settings
-    </button>
+    <div class="tab-segment">
+      <button class="tab" class:active={activeTab === "tasks"} onclick={() => activeTab = "tasks"}>
+        Tasks
+      </button>
+      <button class="tab" class:active={activeTab === "worklogs"} onclick={() => activeTab = "worklogs"}>
+        Work Logs
+      </button>
+      <button class="tab" class:active={activeTab === "settings"} onclick={() => activeTab = "settings"}>
+        Settings
+      </button>
+    </div>
     <button class="quit-btn" onclick={() => (showQuitConfirm = true)} title="Quit">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
@@ -76,64 +78,93 @@
 
   .tabs {
     display: flex;
-    border-bottom: 1px solid var(--border);
-    padding: 0 8px;
+    align-items: center;
+    padding: 10px 10px 8px;
     flex-shrink: 0;
+    gap: 8px;
+    background: var(--bg-glass);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+  }
+
+  .tab-segment {
+    display: flex;
+    background: color-mix(in srgb, var(--text) 6%, transparent);
+    border-radius: 8px;
+    padding: 2px;
+    gap: 1px;
   }
 
   .tab {
-    padding: 10px 16px;
-    font-size: 12px;
+    padding: 5px 14px;
+    font-size: 11.5px;
     font-weight: 500;
     color: var(--text-secondary);
-    border-bottom: 2px solid transparent;
-    transition: all 0.15s;
+    border-radius: 6px;
+    transition: all var(--transition-normal);
   }
 
   .tab:hover {
     color: var(--text);
+    background: color-mix(in srgb, var(--text) 4%, transparent);
   }
 
   .tab.active {
-    color: var(--accent);
-    border-bottom-color: var(--accent);
+    color: var(--text);
+    background: var(--bg);
+    box-shadow: var(--shadow-sm);
+    font-weight: 600;
   }
 
   .quit-btn {
     margin-left: auto;
-    padding: 8px;
+    padding: 6px;
     color: var(--text-secondary);
     display: flex;
     align-items: center;
-    transition: color 0.15s;
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-fast);
   }
 
   .quit-btn:hover {
-    color: #e74c3c;
+    color: var(--danger);
+    background: color-mix(in srgb, var(--danger) 10%, transparent);
+  }
+
+  .content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
 
   .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.4);
+    background: rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(8px) saturate(150%);
+    -webkit-backdrop-filter: blur(8px) saturate(150%);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 100;
+    animation: fadeIn 0.15s ease;
   }
 
   .confirm-dialog {
     background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 16px;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: var(--shadow-modal);
     text-align: center;
+    animation: scaleIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .confirm-dialog p {
-    margin-bottom: 12px;
+    margin-bottom: 14px;
     font-size: 13px;
+    font-weight: 500;
   }
 
   .confirm-actions {
@@ -144,11 +175,11 @@
 
   .confirm-cancel,
   .confirm-quit {
-    padding: 5px 16px;
+    padding: 6px 18px;
     border-radius: var(--radius-sm);
     font-size: 12px;
     font-weight: 500;
-    transition: all 0.15s;
+    transition: all var(--transition-fast);
   }
 
   .confirm-cancel {
@@ -157,7 +188,7 @@
   }
 
   .confirm-cancel:hover {
-    background: var(--border);
+    background: var(--bg-tertiary);
   }
 
   .confirm-quit {
@@ -168,11 +199,6 @@
 
   .confirm-quit:hover {
     background: color-mix(in srgb, var(--danger) 85%, black);
-  }
-
-  .content {
-    flex: 1;
-    overflow-y: auto;
-    overflow-x: hidden;
+    transform: translateY(-0.5px);
   }
 </style>

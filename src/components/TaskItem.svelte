@@ -43,12 +43,18 @@
     </button>
     {#if isTimerOnThis}
       {#if timerStore.isRunning}
-        <button class="btn-icon" onclick={handlePause} title="Pause">⏸</button>
+        <button class="btn-icon" onclick={handlePause} title="Pause">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="3" width="5" height="18" rx="1"/><rect x="14" y="3" width="5" height="18" rx="1"/></svg>
+        </button>
       {:else}
-        <button class="btn-icon btn-play" onclick={handleResume} title="Resume">▶</button>
+        <button class="btn-icon btn-play" onclick={handleResume} title="Resume">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M6 3.5v17a1 1 0 0 0 1.5.86l14-8.5a1 1 0 0 0 0-1.72l-14-8.5A1 1 0 0 0 6 3.5z"/></svg>
+        </button>
       {/if}
     {:else}
-      <button class="btn-icon btn-play" onclick={handlePlay} title="Start timer">▶</button>
+      <button class="btn-icon btn-play" onclick={handlePlay} title="Start timer">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M6 3.5v17a1 1 0 0 0 1.5.86l14-8.5a1 1 0 0 0 0-1.72l-14-8.5A1 1 0 0 0 6 3.5z"/></svg>
+      </button>
     {/if}
     <button class="btn-icon" onclick={() => onAddManual(issue)} title="Add time manually">+</button>
   </div>
@@ -58,18 +64,23 @@
   .task-item {
     display: flex;
     align-items: center;
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--border);
+    padding: 9px 12px;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
     gap: 8px;
-    transition: background 0.1s;
+    transition: all var(--transition-fast);
+    animation: slideUp 0.2s ease both;
+    position: relative;
   }
 
   .task-item:hover {
-    background: var(--bg-secondary);
+    background: color-mix(in srgb, var(--bg-secondary) 70%, transparent);
+    box-shadow: var(--shadow-sm);
   }
 
   .task-item.active {
-    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+    border-left: 3px solid var(--accent);
+    padding-left: 9px;
   }
 
   .task-info {
@@ -94,19 +105,23 @@
     padding: 0;
     cursor: pointer;
     text-decoration: none;
+    transition: color var(--transition-fast);
   }
 
   .task-key-link:hover {
     text-decoration: underline;
+    color: var(--accent-hover);
   }
 
   .task-status {
-    font-size: 10px;
-    padding: 1px 5px;
-    border-radius: 3px;
-    background: var(--bg-secondary);
+    font-size: 9.5px;
+    padding: 1px 7px;
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--text-secondary) 10%, transparent);
     color: var(--text-secondary);
     flex-shrink: 0;
+    font-weight: 500;
+    letter-spacing: 0.2px;
   }
 
   .task-summary {
@@ -116,36 +131,49 @@
     overflow: hidden;
     text-overflow: ellipsis;
     display: block;
+    opacity: 0.85;
   }
 
   .task-actions {
     display: flex;
-    gap: 4px;
+    gap: 3px;
     flex-shrink: 0;
   }
 
   .btn-icon {
-    width: 26px;
-    height: 26px;
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
-    background: var(--bg-secondary);
+    background: transparent;
     color: var(--text-secondary);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 11px;
-    border: 1px solid var(--border);
-    transition: all 0.15s;
+    font-size: 14px;
+    border: 1px solid transparent;
+    transition: all var(--transition-fast);
   }
 
   .btn-icon:hover {
     background: var(--accent);
     color: white;
     border-color: var(--accent);
+    transform: scale(1.08);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+
+  .btn-icon:active {
+    transform: scale(0.95);
   }
 
   .btn-play {
     color: var(--success);
+  }
+
+  .btn-play:hover {
+    background: var(--success);
+    border-color: var(--success);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--success) 30%, transparent);
   }
 
   .pin-icon {
@@ -155,6 +183,7 @@
 
   .btn-pin {
     opacity: 0;
+    transition: opacity var(--transition-fast), background var(--transition-fast), transform var(--transition-fast);
   }
 
   .task-item:hover .btn-pin,

@@ -125,23 +125,31 @@
   .modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.4);
+    background: rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(8px) saturate(150%);
+    -webkit-backdrop-filter: blur(8px) saturate(150%);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 100;
+    animation: fadeIn 0.15s ease;
   }
 
   .modal {
     background: var(--bg);
-    border-radius: var(--radius);
-    padding: 16px;
+    border-radius: 12px;
+    padding: 18px;
     width: 320px;
-    border: 1px solid var(--border);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+    box-shadow: var(--shadow-modal);
+    animation: scaleIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  h3 { margin-bottom: 12px; font-size: 14px; }
+  h3 {
+    margin-bottom: 14px;
+    font-size: 15px;
+    font-weight: 600;
+  }
 
   .issue-link {
     color: var(--accent);
@@ -149,19 +157,24 @@
     font-weight: inherit;
     padding: 0;
     cursor: pointer;
+    transition: color var(--transition-fast);
   }
 
   .issue-link:hover {
     text-decoration: underline;
+    color: var(--accent-hover);
   }
 
   .field { margin-bottom: 10px; }
 
   .field label {
     display: block;
-    font-size: 11px;
+    font-size: 10.5px;
     color: var(--text-secondary);
-    margin-bottom: 3px;
+    margin-bottom: 4px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
   }
 
   .field input, .field textarea { width: 100%; }
@@ -173,30 +186,51 @@
     font-size: 11px;
     color: var(--text-secondary);
     margin-bottom: 10px;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
   }
 
   .sync-warning {
-    background: rgba(255, 170, 0, 0.12);
-    color: #b8860b;
+    background: color-mix(in srgb, var(--warning) 10%, transparent);
+    color: color-mix(in srgb, var(--warning) 80%, black);
     font-size: 11px;
-    padding: 6px 8px;
+    padding: 7px 10px;
     border-radius: var(--radius-sm);
-    margin-bottom: 10px;
+    margin-bottom: 12px;
+    border: 1px solid color-mix(in srgb, var(--warning) 30%, transparent);
   }
 
-  .error { color: var(--danger); font-size: 12px; margin-bottom: 8px; }
+  .error {
+    color: var(--danger);
+    font-size: 12px;
+    margin-bottom: 8px;
+    padding: 6px 8px;
+    background: color-mix(in srgb, var(--danger) 6%, transparent);
+    border-radius: var(--radius-sm);
+  }
 
-  .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+  .actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 6px;
+  }
 
   .btn {
-    padding: 6px 14px;
+    padding: 7px 16px;
     border-radius: var(--radius-sm);
     font-size: 12px;
     font-weight: 500;
+    transition: all var(--transition-fast);
   }
 
   .btn-primary { background: var(--accent); color: white; }
-  .btn-primary:hover { background: var(--accent-hover); }
-  .btn-primary:disabled { opacity: 0.5; }
+  .btn-primary:hover {
+    background: var(--accent-hover);
+    transform: translateY(-0.5px);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 25%, transparent);
+  }
+  .btn-primary:disabled { opacity: 0.5; transform: none; box-shadow: none; }
   .btn-secondary { background: var(--bg-secondary); border: 1px solid var(--border); }
+  .btn-secondary:hover { background: var(--bg-tertiary); }
 </style>
