@@ -3,7 +3,7 @@
   import { worklogsStore } from "../lib/state/worklogs.svelte";
   import WorklogEditModal from "../components/WorklogEditModal.svelte";
   import AddWorklogModal from "../components/AddWorklogModal.svelte";
-  import { formatDurationShort, formatDateTime } from "../lib/utils/format";
+  import { formatDurationShort, formatTimeRange } from "../lib/utils/format";
   import { settingsStore } from "../lib/state/settings.svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import type { Worklog, WorklogFilter } from "../lib/types/worklog";
@@ -31,7 +31,11 @@
   const statusRank = (s: string) => s === "pending" ? 0 : s === "error" ? 1 : 2;
 
   let sortedWorklogs = $derived(
-    [...worklogsStore.items].sort((a, b) => statusRank(a.sync_status) - statusRank(b.sync_status))
+    [...worklogsStore.items].sort((a, b) => {
+      const statusDiff = statusRank(a.sync_status) - statusRank(b.sync_status);
+      if (statusDiff !== 0) return statusDiff;
+      return b.started_at.localeCompare(a.started_at);
+    })
   );
 
   let totalSeconds = $derived(
@@ -256,7 +260,7 @@
             <div class="wl-summary">{wl.issue_summary}</div>
           {/if}
           <div class="wl-meta">
-            <span>{formatDateTime(wl.started_at)}</span>
+            <span>{formatTimeRange(wl.started_at, wl.duration_seconds)}</span>
           </div>
           {#if wl.description}
             <div class="wl-desc">{wl.description}</div>

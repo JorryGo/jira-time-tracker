@@ -17,9 +17,23 @@
   // svelte-ignore state_referenced_locally
   let description = $state(worklog.description);
   // svelte-ignore state_referenced_locally
-  let date = $state(worklog.started_at.split("T")[0]);
+  let date = $state((() => {
+    const d = new Date(worklog.started_at);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })());
+  // svelte-ignore state_referenced_locally
+  let time = $state((() => {
+    const d = new Date(worklog.started_at);
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  })());
   let saving = $state(false);
   let error = $state("");
+
+  let endTime = $derived((() => {
+    const start = new Date(`${date}T${time}:00`);
+    const end = new Date(start.getTime() + (hours * 3600 + minutes * 60) * 1000);
+    return `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`;
+  })());
 
   async function handleSave() {
     const totalSeconds = hours * 3600 + minutes * 60;
@@ -30,7 +44,7 @@
     saving = true;
     error = "";
     try {
-      const startedAt = new Date(date).toISOString();
+      const startedAt = new Date(`${date}T${time}:00`).toISOString();
       await worklogsStore.update(worklog.id, totalSeconds, description, startedAt);
       onClose();
     } catch (e) {
@@ -49,6 +63,18 @@
 
     <div class="field-row">
       <div class="field">
+        <label>Date
+          <input type="date" bind:value={date} />
+        </label>
+      </div>
+      <div class="field">
+        <label>Start time
+          <input type="text" pattern="\d{2}:\d{2}" placeholder="HH:MM" bind:value={time} />
+        </label>
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
         <label>Hours
           <input type="number" min="0" max="24" bind:value={hours} />
         </label>
@@ -58,12 +84,8 @@
           <input type="number" min="0" max="59" bind:value={minutes} />
         </label>
       </div>
-      <div class="field">
-        <label>Date
-          <input type="date" bind:value={date} />
-        </label>
-      </div>
     </div>
+    <div class="end-time-hint">{time} &rarr; {endTime}</div>
 
     <div class="field">
       <label>Description
@@ -119,6 +141,12 @@
 
   .field-row { display: flex; gap: 8px; }
   .field-row .field { flex: 1; }
+
+  .end-time-hint {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+  }
 
   .error { color: var(--danger); font-size: 12px; margin-bottom: 8px; }
 

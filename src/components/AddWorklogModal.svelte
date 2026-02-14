@@ -29,9 +29,19 @@
   let description = $state("");
   // svelte-ignore state_referenced_locally
   let date = $state(selectedDate ?? toLocalDateStr(new Date()));
+  let time = $state((() => {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  })());
 
   let saving = $state(false);
   let error = $state("");
+
+  let endTime = $derived((() => {
+    const start = new Date(`${date}T${time}:00`);
+    const end = new Date(start.getTime() + (hours * 3600 + minutes * 60) * 1000);
+    return `${String(end.getHours()).padStart(2, "0")}:${String(end.getMinutes()).padStart(2, "0")}`;
+  })());
 
   // Search
   let searchQuery = $state("");
@@ -84,7 +94,7 @@
     saving = true;
     error = "";
     try {
-      const startedAt = new Date(date).toISOString();
+      const startedAt = new Date(`${date}T${time}:00`).toISOString();
       await worklogsStore.create(issueKey, startedAt, totalSeconds, description);
       onClose();
     } catch (e) {
@@ -135,6 +145,18 @@
 
     <div class="field-row">
       <div class="field">
+        <label>Date
+          <input type="date" bind:value={date} />
+        </label>
+      </div>
+      <div class="field">
+        <label>Start time
+          <input type="text" pattern="\d{2}:\d{2}" placeholder="HH:MM" bind:value={time} />
+        </label>
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
         <label>Hours
           <input type="number" min="0" max="24" bind:value={hours} />
         </label>
@@ -144,12 +166,8 @@
           <input type="number" min="0" max="59" bind:value={minutes} />
         </label>
       </div>
-      <div class="field">
-        <label>Date
-          <input type="date" bind:value={date} />
-        </label>
-      </div>
     </div>
+    <div class="end-time-hint">{time} &rarr; {endTime}</div>
 
     <div class="field">
       <label>Description
@@ -284,6 +302,12 @@
     font-size: 11px;
     color: var(--accent);
     margin-left: auto;
+  }
+
+  .end-time-hint {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
   }
 
   .error {

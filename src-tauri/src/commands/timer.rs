@@ -177,7 +177,9 @@ async fn stop_timer_internal(db: &SqlitePool) -> Result<StoppedWorklog, String> 
     };
     let total_secs = total_secs.max(0);
 
-    let now_str = Utc::now().to_rfc3339();
+    let stop_time = Utc::now();
+    let worklog_started = stop_time - chrono::Duration::seconds(total_secs);
+    let started_str = worklog_started.to_rfc3339();
 
     // Create worklog
     let result = sqlx::query(
@@ -185,7 +187,7 @@ async fn stop_timer_internal(db: &SqlitePool) -> Result<StoppedWorklog, String> 
          VALUES (?1, ?2, ?3, '', 'pending')",
     )
     .bind(&issue_key)
-    .bind(&now_str)
+    .bind(&started_str)
     .bind(total_secs)
     .execute(db)
     .await

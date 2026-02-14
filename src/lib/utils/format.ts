@@ -25,6 +25,18 @@ export function formatDate(isoString: string): string {
   }
 }
 
+export function formatTimeRange(isoString: string, durationSeconds: number): string {
+  try {
+    const start = new Date(isoString);
+    const end = new Date(start.getTime() + durationSeconds * 1000);
+    const fmt = (d: Date) =>
+      `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    return `${fmt(start)} \u2013 ${fmt(end)}`;
+  } catch {
+    return isoString;
+  }
+}
+
 export function formatDateTime(isoString: string): string {
   try {
     const d = new Date(isoString);
@@ -33,6 +45,7 @@ export function formatDateTime(isoString: string): string {
       month: "2-digit",
       hour: "2-digit",
       minute: "2-digit",
+      hour12: false,
     });
   } catch {
     return isoString;
