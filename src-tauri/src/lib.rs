@@ -308,10 +308,11 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app, event| {
+        .run(|_app, _event| {
             // Handle macOS dock icon click: unminimize the calendar window if it exists
-            if let tauri::RunEvent::Reopen { .. } = event {
-                if let Some(calendar) = app.get_webview_window("calendar") {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = _event {
+                if let Some(calendar) = _app.get_webview_window("calendar") {
                     let _ = calendar.unminimize();
                     let _ = calendar.show();
                     let _ = calendar.set_focus();
