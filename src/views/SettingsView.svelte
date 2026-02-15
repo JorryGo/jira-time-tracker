@@ -248,7 +248,7 @@
   </section>
 
   <section class="about">
-    <p>Jira Time Tracker v0.1.2</p>
+    <p>Jira Time Tracker v0.1.5</p>
   </section>
 </div>
 
