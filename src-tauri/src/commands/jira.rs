@@ -349,6 +349,24 @@ pub async fn jira_import_worklogs(
         warnings.push(format!("JQL search failed: {}", e));
     }
     let issues = jql_result.unwrap_or_default();
+
+    // Cache issue summaries so worklogs LEFT JOIN can resolve them
+    for issue in &issues {
+        let _ = sqlx::query(
+            "INSERT INTO issues (issue_key, summary, project_key, status, issue_type, updated_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, datetime('now')) \
+             ON CONFLICT(issue_key) DO UPDATE SET \
+             summary = ?2, project_key = ?3, status = ?4, issue_type = ?5, updated_at = datetime('now')",
+        )
+        .bind(&issue.issue_key)
+        .bind(&issue.summary)
+        .bind(&issue.project_key)
+        .bind(&issue.status)
+        .bind(&issue.issue_type)
+        .execute(&state.db)
+        .await;
+    }
+
     let issue_keys: Vec<String> = issues.into_iter().map(|i| i.issue_key).collect();
 
     // Only fetch worklogs started after (target_date - 2 days) to reduce payload
