@@ -314,6 +314,13 @@
   <div class="summary-bar">
     <span class="total-label">Total:</span>
     <span class="total-value">{formatDurationShort(totalSeconds)}</span>
+    {#if syncing}
+      <span class="sync-indicator" title="Syncing with Jira...">
+        <svg class="spinner" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+          <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+        </svg>
+      </span>
+    {/if}
   </div>
 
   {#if toast}
@@ -592,6 +599,21 @@
     font-weight: 700;
     font-family: var(--font-mono);
     letter-spacing: 0.3px;
+  }
+
+  .sync-indicator {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    opacity: 0.85;
+  }
+
+  .spinner {
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 
   .btn {

@@ -61,8 +61,8 @@ class SettingsStore {
     this.jiraBaseUrl = baseUrl;
     this.jiraEmail = email;
     this.isConnected = true;
-    this.userName = user.display_name;
-    return user.display_name;
+    this.userName = user.displayName;
+    return user.displayName;
   }
 
   async saveJqlFilter(jql: string) {

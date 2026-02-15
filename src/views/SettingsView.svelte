@@ -105,6 +105,12 @@
 </script>
 
 <div class="settings-view">
+  {#if message}
+    <div class="message" class:error={messageType === "error"} class:success={messageType === "success"}>
+      {message}
+    </div>
+  {/if}
+
   <section>
     <h3>Jira Connection</h3>
     {#if settingsStore.isConnected}
@@ -241,12 +247,6 @@
     {/if}
   </section>
 
-  {#if message}
-    <div class="message" class:error={messageType === "error"} class:success={messageType === "success"}>
-      {message}
-    </div>
-  {/if}
-
   <section class="about">
     <p>Jira Time Tracker v0.1.2</p>
   </section>
@@ -379,7 +379,10 @@
     border-radius: var(--radius-sm);
     font-size: 12px;
     margin-bottom: 12px;
-    animation: slideUp 0.2s ease;
+    animation: slideDown 0.2s ease;
+    position: sticky;
+    top: 0;
+    z-index: 10;
   }
 
   .message.success {

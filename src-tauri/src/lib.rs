@@ -187,12 +187,10 @@ pub fn run() {
                     let _ = window.set_position(tauri::Position::Physical(
                         tauri::PhysicalPosition::new(x, y),
                     ));
-                } else {
-                    #[cfg(target_os = "macos")]
-                    {
-                        let _ = window.move_window(Position::TrayBottomCenter);
-                    }
                 }
+                // Note: on first launch with no saved position, we skip tray-relative positioning
+                // because tray position isn't available yet. The window will use its default
+                // centered position and get repositioned on the next tray click.
                 let _ = window.show();
                 let _ = window.set_focus();
             }
