@@ -66,6 +66,12 @@ pub async fn timer_start(
             accumulated + elapsed
         };
         let total_secs = total_secs.max(0);
+        // Round up to nearest minute (minimum 60s)
+        let total_secs = if total_secs > 0 {
+            ((total_secs + 59) / 60) * 60
+        } else {
+            total_secs
+        };
 
         let stop_time = Utc::now();
         let worklog_started = stop_time - chrono::Duration::seconds(total_secs);
@@ -209,6 +215,12 @@ async fn stop_timer_internal(db: &SqlitePool) -> Result<StoppedWorklog, String> 
         accumulated + elapsed
     };
     let total_secs = total_secs.max(0);
+    // Round up to nearest minute (minimum 60s)
+    let total_secs = if total_secs > 0 {
+        ((total_secs + 59) / 60) * 60
+    } else {
+        total_secs
+    };
 
     let stop_time = Utc::now();
     let worklog_started = stop_time - chrono::Duration::seconds(total_secs);

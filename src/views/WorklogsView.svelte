@@ -337,7 +337,7 @@
       </div>
     {/if}
     {#each sortedWorklogs as wl (wl.id)}
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
       <div class="worklog-row" onclick={(e) => { if (!(e.target as HTMLElement).closest('button, input, a')) editingWorklog = wl; }}>
         {#if wl.sync_status === "pending"}
           <input

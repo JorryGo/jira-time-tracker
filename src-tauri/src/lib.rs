@@ -173,6 +173,27 @@ pub fn run() {
                 })
                 .build(app)?;
 
+            // Show window on startup so the user sees the app immediately
+            if let Some(window) = app.get_webview_window("main") {
+                let saved = *app
+                    .state::<state::AppState>()
+                    .window_position
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
+                if let Some((x, y)) = saved {
+                    let _ = window.set_position(tauri::Position::Physical(
+                        tauri::PhysicalPosition::new(x, y),
+                    ));
+                } else {
+                    #[cfg(target_os = "macos")]
+                    {
+                        let _ = window.move_window(Position::TrayBottomCenter);
+                    }
+                }
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+
             Ok(())
         })
         .on_window_event(|window, event| {
