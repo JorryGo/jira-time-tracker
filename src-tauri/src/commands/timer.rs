@@ -1,7 +1,7 @@
 use crate::state::AppState;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use sqlx::SqlitePool;
+use sqlx::SqliteConnection;
 use tauri::State;
 
 #[derive(Debug, Serialize, Deserialize, Clone, sqlx::FromRow)]
@@ -19,6 +19,72 @@ pub struct StoppedWorklog {
     pub id: i64,
     pub issue_key: String,
     pub duration_seconds: i64,
+}
+
+/// Shared logic: read active timer, calculate duration, create worklog, delete timer.
+/// Returns None if no active timer exists, or Some(StoppedWorklog) on success.
+/// Skips creating worklog if rounded duration is 0.
+async fn stop_and_save(conn: &mut SqliteConnection) -> Result<Option<StoppedWorklog>, String> {
+    let row: Option<(String, String, i64, bool, Option<String>, String)> = sqlx::query_as(
+        "SELECT issue_key, started_at, accumulated_secs, is_paused, paused_at, description FROM active_timer WHERE id = 1",
+    )
+    .fetch_optional(&mut *conn)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let Some((issue_key, started_at, accumulated, is_paused, _, description)) = row else {
+        return Ok(None);
+    };
+
+    let total_secs = if is_paused {
+        accumulated
+    } else {
+        let now = Utc::now();
+        let started = chrono::DateTime::parse_from_rfc3339(&started_at)
+            .map_err(|e| format!("Invalid started_at: {}", e))?;
+        let elapsed = (now - started.with_timezone(&Utc)).num_seconds();
+        accumulated + elapsed
+    };
+    let total_secs = total_secs.max(0);
+    // Round up to nearest minute
+    let total_secs = if total_secs > 0 {
+        ((total_secs + 59) / 60) * 60
+    } else {
+        total_secs
+    };
+
+    // Delete active timer
+    sqlx::query("DELETE FROM active_timer WHERE id = 1")
+        .execute(&mut *conn)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Don't create worklog with zero duration
+    if total_secs == 0 {
+        return Ok(None);
+    }
+
+    let stop_time = Utc::now();
+    let worklog_started = stop_time - chrono::Duration::seconds(total_secs);
+    let started_str = worklog_started.to_rfc3339();
+
+    let result = sqlx::query(
+        "INSERT INTO worklogs (issue_key, started_at, duration_seconds, description, sync_status) \
+         VALUES (?1, ?2, ?3, ?4, 'pending')",
+    )
+    .bind(&issue_key)
+    .bind(&started_str)
+    .bind(total_secs)
+    .bind(&description)
+    .execute(&mut *conn)
+    .await
+    .map_err(|e| e.to_string())?;
+
+    Ok(Some(StoppedWorklog {
+        id: result.last_insert_rowid(),
+        issue_key,
+        duration_seconds: total_secs,
+    }))
 }
 
 #[tauri::command]
@@ -49,53 +115,8 @@ pub async fn timer_start(
 ) -> Result<TimerState, String> {
     let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
 
-    // If timer is running, stop it first (inlined to use transaction)
-    let existing: Option<(String, String, i64, bool, Option<String>, String)> = sqlx::query_as(
-        "SELECT issue_key, started_at, accumulated_secs, is_paused, paused_at, description FROM active_timer WHERE id = 1",
-    )
-    .fetch_optional(&mut *tx)
-    .await
-    .map_err(|e| e.to_string())?;
-
-    if let Some((old_key, started_at, accumulated, is_paused, _, old_description)) = existing {
-        let total_secs = if is_paused {
-            accumulated
-        } else {
-            let now = Utc::now();
-            let started = chrono::DateTime::parse_from_rfc3339(&started_at)
-                .map_err(|e| format!("Invalid started_at: {}", e))?;
-            let elapsed = (now - started.with_timezone(&Utc)).num_seconds();
-            accumulated + elapsed
-        };
-        let total_secs = total_secs.max(0);
-        // Round up to nearest minute (minimum 60s)
-        let total_secs = if total_secs > 0 {
-            ((total_secs + 59) / 60) * 60
-        } else {
-            total_secs
-        };
-
-        let stop_time = Utc::now();
-        let worklog_started = stop_time - chrono::Duration::seconds(total_secs);
-        let started_str = worklog_started.to_rfc3339();
-
-        sqlx::query(
-            "INSERT INTO worklogs (issue_key, started_at, duration_seconds, description, sync_status) \
-             VALUES (?1, ?2, ?3, ?4, 'pending')",
-        )
-        .bind(&old_key)
-        .bind(&started_str)
-        .bind(total_secs)
-        .bind(&old_description)
-        .execute(&mut *tx)
-        .await
-        .map_err(|e| e.to_string())?;
-
-        sqlx::query("DELETE FROM active_timer WHERE id = 1")
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| e.to_string())?;
-    }
+    // Stop existing timer if running (reuses shared logic)
+    stop_and_save(&mut *tx).await?;
 
     let now = Utc::now().to_rfc3339();
     sqlx::query(
@@ -200,71 +221,16 @@ pub async fn timer_resume(
     })
 }
 
-async fn stop_timer_internal(db: &SqlitePool) -> Result<StoppedWorklog, String> {
-    let row: (String, String, i64, bool, Option<String>, String) = sqlx::query_as(
-        "SELECT issue_key, started_at, accumulated_secs, is_paused, paused_at, description FROM active_timer WHERE id = 1",
-    )
-    .fetch_optional(db)
-    .await
-    .map_err(|e| e.to_string())?
-    .ok_or("No active timer")?;
-
-    let (issue_key, started_at, accumulated, is_paused, _, description) = row;
-
-    let total_secs = if is_paused {
-        accumulated
-    } else {
-        let now = Utc::now();
-        let started = chrono::DateTime::parse_from_rfc3339(&started_at)
-            .map_err(|e| format!("Invalid started_at: {}", e))?;
-        let elapsed = (now - started.with_timezone(&Utc)).num_seconds();
-        accumulated + elapsed
-    };
-    let total_secs = total_secs.max(0);
-    // Round up to nearest minute (minimum 60s)
-    let total_secs = if total_secs > 0 {
-        ((total_secs + 59) / 60) * 60
-    } else {
-        total_secs
-    };
-
-    let stop_time = Utc::now();
-    let worklog_started = stop_time - chrono::Duration::seconds(total_secs);
-    let started_str = worklog_started.to_rfc3339();
-
-    // Create worklog
-    let result = sqlx::query(
-        "INSERT INTO worklogs (issue_key, started_at, duration_seconds, description, sync_status) \
-         VALUES (?1, ?2, ?3, ?4, 'pending')",
-    )
-    .bind(&issue_key)
-    .bind(&started_str)
-    .bind(total_secs)
-    .bind(&description)
-    .execute(db)
-    .await
-    .map_err(|e| e.to_string())?;
-
-    let id = result.last_insert_rowid();
-
-    // Delete active timer
-    sqlx::query("DELETE FROM active_timer WHERE id = 1")
-        .execute(db)
-        .await
-        .map_err(|e| e.to_string())?;
-
-    Ok(StoppedWorklog {
-        id,
-        issue_key,
-        duration_seconds: total_secs,
-    })
-}
-
 #[tauri::command]
 pub async fn timer_stop(
     state: State<'_, AppState>,
 ) -> Result<StoppedWorklog, String> {
-    stop_timer_internal(&state.db).await
+    let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
+    let result = stop_and_save(&mut *tx)
+        .await?
+        .ok_or("No active timer")?;
+    tx.commit().await.map_err(|e| e.to_string())?;
+    Ok(result)
 }
 
 #[tauri::command]

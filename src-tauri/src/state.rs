@@ -7,6 +7,7 @@ pub struct AppState {
     pub jira_config: Mutex<Option<JiraConfig>>,
     pub window_position: Mutex<Option<(i32, i32)>>,
     pub cached_account_id: Mutex<Option<String>>,
+    pub http_client: reqwest::Client,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]

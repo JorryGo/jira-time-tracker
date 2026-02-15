@@ -20,6 +20,7 @@ fn get_client(state: &AppState) -> Result<JiraClient, String> {
         .clone()
         .ok_or_else(|| "Jira not configured. Go to Settings to set up connection.".to_string())?;
     Ok(JiraClient::new(
+        state.http_client.clone(),
         &config.base_url,
         &config.email,
         &config.api_token,
@@ -28,11 +29,12 @@ fn get_client(state: &AppState) -> Result<JiraClient, String> {
 
 #[tauri::command]
 pub async fn jira_test_connection(
+    state: State<'_, AppState>,
     base_url: String,
     email: String,
     api_token: String,
 ) -> Result<JiraUser, String> {
-    let client = JiraClient::new(&base_url, &email, &api_token);
+    let client = JiraClient::new(state.http_client.clone(), &base_url, &email, &api_token);
     client.get_myself().await
 }
 
@@ -155,7 +157,12 @@ pub async fn jira_push_all_pending(
 
     let client = get_client(&state)?;
 
-    for (id, issue_key, started_at, duration, description) in rows {
+    for (i, (id, issue_key, started_at, duration, description)) in rows.into_iter().enumerate() {
+        // Rate limit: pause between requests to avoid Jira API throttling
+        if i > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        }
+
         let started_jira = format_for_jira(&started_at)?;
 
         match client
@@ -293,6 +300,7 @@ pub struct ImportSummary {
     pub deleted: u32,
     pub skipped: u32,
     pub issues_checked: u32,
+    pub warnings: Vec<String>,
 }
 
 #[tauri::command]
@@ -333,8 +341,13 @@ pub async fn jira_import_worklogs(
         "worklogDate >= \"{}\" AND worklogDate <= \"{}\" AND worklogAuthor = currentUser()",
         day_before, day_after
     );
+    let mut warnings: Vec<String> = Vec::new();
+
     let jql_result = client.search_issues(&jql, 50).await;
     let jql_succeeded = jql_result.is_ok();
+    if let Err(ref e) = jql_result {
+        warnings.push(format!("JQL search failed: {}", e));
+    }
     let issues = jql_result.unwrap_or_default();
     let issue_keys: Vec<String> = issues.into_iter().map(|i| i.issue_key).collect();
 
@@ -384,7 +397,8 @@ pub async fn jira_import_worklogs(
     for (issue_key, result) in &worklog_results {
         let response = match result {
             Ok(r) => r,
-            Err(_) => {
+            Err(e) => {
+                warnings.push(format!("Failed to fetch worklogs for {}: {}", issue_key, e));
                 failed_issues.insert(issue_key.clone());
                 continue;
             }
@@ -501,5 +515,6 @@ pub async fn jira_import_worklogs(
         deleted,
         skipped,
         issues_checked,
+        warnings,
     })
 }

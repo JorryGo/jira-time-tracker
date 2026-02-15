@@ -11,11 +11,11 @@ pub struct JiraClient {
 }
 
 impl JiraClient {
-    pub fn new(base_url: &str, email: &str, api_token: &str) -> Self {
+    pub fn new(client: Client, base_url: &str, email: &str, api_token: &str) -> Self {
         let credentials = format!("{}:{}", email, api_token);
         let auth_header = format!("Basic {}", general_purpose::STANDARD.encode(credentials));
         Self {
-            client: Client::new(),
+            client,
             base_url: base_url.trim_end_matches('/').to_string(),
             auth_header,
         }

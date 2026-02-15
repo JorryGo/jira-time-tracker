@@ -130,37 +130,45 @@ pub async fn update_worklog(
         return Err("Cannot edit a synced worklog".to_string());
     }
 
+    let mut set_clauses = Vec::new();
+    let mut binds: Vec<String> = Vec::new();
+
     if let Some(dur) = duration_seconds {
-        sqlx::query("UPDATE worklogs SET duration_seconds = ?1, updated_at = datetime('now') WHERE id = ?2")
-            .bind(dur)
-            .bind(id)
-            .execute(&state.db)
-            .await
-            .map_err(|e| e.to_string())?;
+        binds.push(dur.to_string());
+        set_clauses.push(format!("duration_seconds = ?{}", binds.len()));
     }
     if let Some(ref desc) = description {
-        sqlx::query("UPDATE worklogs SET description = ?1, updated_at = datetime('now') WHERE id = ?2")
-            .bind(desc)
-            .bind(id)
-            .execute(&state.db)
-            .await
-            .map_err(|e| e.to_string())?;
+        binds.push(desc.clone());
+        set_clauses.push(format!("description = ?{}", binds.len()));
     }
     if let Some(ref sa) = started_at {
-        sqlx::query("UPDATE worklogs SET started_at = ?1, updated_at = datetime('now') WHERE id = ?2")
-            .bind(sa)
-            .bind(id)
-            .execute(&state.db)
-            .await
-            .map_err(|e| e.to_string())?;
+        binds.push(sa.clone());
+        set_clauses.push(format!("started_at = ?{}", binds.len()));
     }
 
-    // Reset error state
-    sqlx::query("UPDATE worklogs SET sync_status = 'pending', sync_error = NULL WHERE id = ?1 AND sync_status = 'error'")
-        .bind(id)
-        .execute(&state.db)
-        .await
-        .map_err(|e| e.to_string())?;
+    if !set_clauses.is_empty() {
+        // Reset error state in the same UPDATE
+        set_clauses.push("updated_at = datetime('now')".to_string());
+        set_clauses.push(format!(
+            "sync_status = CASE WHEN sync_status = 'error' THEN 'pending' ELSE sync_status END"
+        ));
+        set_clauses.push(format!(
+            "sync_error = CASE WHEN sync_status = 'error' THEN NULL ELSE sync_error END"
+        ));
+
+        binds.push(id.to_string());
+        let sql = format!(
+            "UPDATE worklogs SET {} WHERE id = ?{}",
+            set_clauses.join(", "),
+            binds.len()
+        );
+
+        let mut query = sqlx::query(&sql);
+        for bind in &binds {
+            query = query.bind(bind);
+        }
+        query.execute(&state.db).await.map_err(|e| e.to_string())?;
+    }
 
     sqlx::query_as::<_, Worklog>(
         "SELECT worklogs.*, issues.summary as issue_summary FROM worklogs \

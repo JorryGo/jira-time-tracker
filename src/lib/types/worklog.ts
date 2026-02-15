@@ -38,4 +38,5 @@ export interface ImportSummary {
   deleted: number;
   skipped: number;
   issues_checked: number;
+  warnings: string[];
 }

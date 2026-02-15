@@ -90,6 +90,14 @@ class TimerStore {
     }, 500);
   }
 
+  flushPendingDescription() {
+    if (this.descriptionTimerId) {
+      clearTimeout(this.descriptionTimerId);
+      this.descriptionTimerId = null;
+      cmd.timerUpdateDescription(this.description);
+    }
+  }
+
   private startTicking() {
     this.stopTicking();
     this.intervalId = window.setInterval(() => {

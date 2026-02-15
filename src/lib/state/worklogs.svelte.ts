@@ -116,6 +116,17 @@ class WorklogsStore {
     );
   }
 
+  flushPendingDescriptions() {
+    for (const [id, timerId] of this.descTimers) {
+      clearTimeout(timerId);
+      const item = this.items.find((w) => w.id === id);
+      if (item) {
+        cmd.updateWorklog(id, undefined, item.description, undefined);
+      }
+    }
+    this.descTimers.clear();
+  }
+
   toggleSelect(id: number) {
     const newSet = new Set(this.selectedIds);
     if (newSet.has(id)) {

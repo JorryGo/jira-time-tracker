@@ -27,6 +27,13 @@
   let pushingAll = $state(false);
   let pushingSelected = $state(false);
   let toast = $state("");
+  let toastTimer: number | undefined;
+
+  function showToast(msg: string, duration = 4000) {
+    if (toastTimer) clearTimeout(toastTimer);
+    toast = msg;
+    toastTimer = window.setTimeout(() => { toast = ""; toastTimer = undefined; }, duration);
+  }
 
   let displayDate = $derived.by(() => {
     const [y, m, d] = selectedDate.split("-");
@@ -174,8 +181,7 @@
         await worklogsStore.remove(confirmDeleteId);
       }
     } catch (e) {
-      toast = String(e);
-      setTimeout(() => (toast = ""), 3000);
+      showToast(String(e), 3000);
     } finally {
       confirmDeleteId = null;
       confirmDeleteSynced = false;
@@ -198,12 +204,11 @@
     pushingAll = true;
     try {
       const result = await worklogsStore.pushAll(selectedDate);
-      toast = `Pushed ${result.success}/${result.total}${result.failed > 0 ? `, ${result.failed} failed` : ""}`;
+      showToast(`Pushed ${result.success}/${result.total}${result.failed > 0 ? `, ${result.failed} failed` : ""}`);
     } catch (e) {
-      toast = String(e);
+      showToast(String(e));
     } finally {
       pushingAll = false;
-      setTimeout(() => (toast = ""), 4000);
     }
   }
 
@@ -211,12 +216,11 @@
     pushingSelected = true;
     try {
       const result = await worklogsStore.pushSelected();
-      toast = `Pushed ${result.success}/${result.total}${result.failed > 0 ? `, ${result.failed} failed` : ""}`;
+      showToast(`Pushed ${result.success}/${result.total}${result.failed > 0 ? `, ${result.failed} failed` : ""}`);
     } catch (e) {
-      toast = String(e);
+      showToast(String(e));
     } finally {
       pushingSelected = false;
-      setTimeout(() => (toast = ""), 4000);
     }
   }
 

@@ -1,10 +1,13 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import TasksView from "./views/TasksView.svelte";
   import WorklogsView from "./views/WorklogsView.svelte";
   import SettingsView from "./views/SettingsView.svelte";
   import CalendarView from "./views/CalendarView.svelte";
+  import { timerStore } from "./lib/state/timer.svelte";
+  import { worklogsStore } from "./lib/state/worklogs.svelte";
 
   const isCalendarWindow = new URLSearchParams(window.location.search).get("view") === "calendar";
 
@@ -15,6 +18,17 @@
     if ((e.target as HTMLElement).closest("button")) return;
     getCurrentWindow().startDragging();
   }
+
+  onMount(() => {
+    if (isCalendarWindow) return;
+    const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
+      if (!focused) {
+        timerStore.flushPendingDescription();
+        worklogsStore.flushPendingDescriptions();
+      }
+    });
+    return () => { unlisten.then((fn) => fn()); };
+  });
 </script>
 
 {#if isCalendarWindow}
