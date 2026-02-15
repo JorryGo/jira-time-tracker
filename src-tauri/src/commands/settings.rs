@@ -75,6 +75,12 @@ pub async fn settings_save_jira_config(
         api_token,
     });
 
+    // Clear cached account_id when config changes
+    *state
+        .cached_account_id
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = None;
+
     Ok(())
 }
 

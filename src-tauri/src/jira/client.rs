@@ -3,6 +3,7 @@ use reqwest::Client;
 
 use super::types::*;
 
+#[derive(Clone)]
 pub struct JiraClient {
     client: Client,
     base_url: String,
@@ -180,12 +181,17 @@ impl JiraClient {
     pub async fn get_worklogs(
         &self,
         issue_key: &str,
+        started_after: Option<i64>,
     ) -> Result<JiraWorklogListResponse, String> {
+        let mut url = format!(
+            "{}/rest/api/3/issue/{}/worklog",
+            self.base_url, issue_key
+        );
+        if let Some(epoch_ms) = started_after {
+            url = format!("{}?startedAfter={}", url, epoch_ms);
+        }
         self.client
-            .get(format!(
-                "{}/rest/api/3/issue/{}/worklog",
-                self.base_url, issue_key
-            ))
+            .get(&url)
             .header("Authorization", &self.auth_header)
             .header("Accept", "application/json")
             .send()

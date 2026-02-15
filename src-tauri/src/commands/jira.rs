@@ -137,64 +137,56 @@ pub async fn jira_push_all_pending(
     state: State<'_, AppState>,
     date: String,
 ) -> Result<PushSummary, String> {
-    let date_from = format!("{}T00:00:00", date);
-    let date_to = format!("{}T23:59:59", date);
-    let ids: Vec<(i64,)> =
-        sqlx::query_as("SELECT id FROM worklogs WHERE sync_status = 'pending' AND started_at >= ?1 AND started_at <= ?2")
-            .bind(&date_from)
-            .bind(&date_to)
-            .fetch_all(&state.db)
-            .await
-            .map_err(|e| e.to_string())?;
+    let push_date_from = format!("{}T00:00:00", date);
+    let push_date_to = format!("{}T23:59:59", date);
+    let rows: Vec<(i64, String, String, i64, String)> = sqlx::query_as(
+        "SELECT id, issue_key, started_at, duration_seconds, description \
+         FROM worklogs WHERE sync_status = 'pending' AND started_at >= ?1 AND started_at <= ?2",
+    )
+    .bind(&push_date_from)
+    .bind(&push_date_to)
+    .fetch_all(&state.db)
+    .await
+    .map_err(|e| e.to_string())?;
 
-    let total = ids.len() as u32;
+    let total = rows.len() as u32;
     let mut success = 0u32;
     let mut errors = Vec::new();
 
     let client = get_client(&state)?;
 
-    for (id,) in ids {
-        let row: Option<(String, String, i64, String)> = sqlx::query_as(
-            "SELECT issue_key, started_at, duration_seconds, description FROM worklogs WHERE id = ?1",
-        )
-        .bind(id)
-        .fetch_optional(&state.db)
-        .await
-        .map_err(|e| e.to_string())?;
+    for (id, issue_key, started_at, duration, description) in rows {
+        let started_jira = format_for_jira(&started_at)?;
 
-        if let Some((issue_key, started_at, duration, description)) = row {
-            let started_jira = format_for_jira(&started_at)?;
-
-            match client
-                .add_worklog(&issue_key, duration, &started_jira, &description)
+        match client
+            .add_worklog(&issue_key, duration, &started_jira, &description)
+            .await
+        {
+            Ok(resp) => {
+                if let Err(db_err) = sqlx::query(
+                    "UPDATE worklogs SET sync_status = 'synced', jira_worklog_id = ?1, sync_error = NULL, updated_at = datetime('now') WHERE id = ?2",
+                )
+                .bind(&resp.id)
+                .bind(id)
+                .execute(&state.db)
                 .await
-            {
-                Ok(resp) => {
-                    if let Err(db_err) = sqlx::query(
-                        "UPDATE worklogs SET sync_status = 'synced', jira_worklog_id = ?1, sync_error = NULL, updated_at = datetime('now') WHERE id = ?2",
-                    )
-                    .bind(&resp.id)
-                    .bind(id)
-                    .execute(&state.db)
-                    .await
-                    {
-                        eprintln!("Failed to update worklog {} after push: {}", id, db_err);
-                    }
-                    success += 1;
+                {
+                    eprintln!("Failed to update worklog {} after push: {}", id, db_err);
                 }
-                Err(e) => {
-                    if let Err(db_err) = sqlx::query(
-                        "UPDATE worklogs SET sync_status = 'error', sync_error = ?1, updated_at = datetime('now') WHERE id = ?2",
-                    )
-                    .bind(&e)
-                    .bind(id)
-                    .execute(&state.db)
-                    .await
-                    {
-                        eprintln!("Failed to record sync error for worklog {}: {}", id, db_err);
-                    }
-                    errors.push(format!("{}: {}", issue_key, e));
+                success += 1;
+            }
+            Err(e) => {
+                if let Err(db_err) = sqlx::query(
+                    "UPDATE worklogs SET sync_status = 'error', sync_error = ?1, updated_at = datetime('now') WHERE id = ?2",
+                )
+                .bind(&e)
+                .bind(id)
+                .execute(&state.db)
+                .await
+                {
+                    eprintln!("Failed to record sync error for worklog {}: {}", id, db_err);
                 }
+                errors.push(format!("{}: {}", issue_key, e));
             }
         }
     }
@@ -310,8 +302,24 @@ pub async fn jira_import_worklogs(
 ) -> Result<ImportSummary, String> {
     let client = get_client(&state)?;
 
-    let user = client.get_myself().await?;
-    let my_account_id = user.account_id;
+    let my_account_id = {
+        let cached = state
+            .cached_account_id
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        if let Some(id) = cached {
+            id
+        } else {
+            let user = client.get_myself().await?;
+            let id = user.account_id;
+            *state
+                .cached_account_id
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = Some(id.clone());
+            id
+        }
+    };
 
     let target_date = NaiveDate::parse_from_str(&date, "%Y-%m-%d")
         .map_err(|e| format!("Invalid date '{}': {}", date, e))?;
@@ -330,10 +338,20 @@ pub async fn jira_import_worklogs(
     let issues = jql_result.unwrap_or_default();
     let issue_keys: Vec<String> = issues.into_iter().map(|i| i.issue_key).collect();
 
-    // Load existing synced worklogs: jira_worklog_id -> jira_updated_at
+    // Only fetch worklogs started after (target_date - 2 days) to reduce payload
+    let started_after_epoch = day_before
+        .and_hms_opt(0, 0, 0)
+        .map(|dt| dt.and_utc().timestamp_millis());
+
+    // Load existing synced worklogs for the target date range (not ALL worklogs)
+    let date_from = format!("{}T00:00:00", day_before);
+    let date_to = format!("{}T23:59:59", day_after);
     let existing_rows: Vec<(String, Option<String>)> = sqlx::query_as(
-        "SELECT jira_worklog_id, jira_updated_at FROM worklogs WHERE jira_worklog_id IS NOT NULL",
+        "SELECT jira_worklog_id, jira_updated_at FROM worklogs \
+         WHERE jira_worklog_id IS NOT NULL AND started_at >= ?1 AND started_at <= ?2",
     )
+    .bind(&date_from)
+    .bind(&date_to)
     .fetch_all(&state.db)
     .await
     .map_err(|e| e.to_string())?;
@@ -348,8 +366,23 @@ pub async fn jira_import_worklogs(
     let mut seen_jira_ids: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut failed_issues: std::collections::HashSet<String> = std::collections::HashSet::new();
 
-    for issue_key in &issue_keys {
-        let response = match client.get_worklogs(issue_key).await {
+    // Fetch worklogs for all issues in parallel (max 5 concurrent)
+    use futures::stream::{self, StreamExt};
+
+    let worklog_results: Vec<_> = stream::iter(issue_keys)
+        .map(|key| {
+            let client = client.clone();
+            async move {
+                let result = client.get_worklogs(&key, started_after_epoch).await;
+                (key, result)
+            }
+        })
+        .buffer_unordered(5)
+        .collect()
+        .await;
+
+    for (issue_key, result) in &worklog_results {
+        let response = match result {
             Ok(r) => r,
             Err(_) => {
                 failed_issues.insert(issue_key.clone());
@@ -357,7 +390,7 @@ pub async fn jira_import_worklogs(
             }
         };
 
-        for entry in response.worklogs {
+        for entry in &response.worklogs {
             if entry.author.account_id != my_account_id {
                 continue;
             }
@@ -433,8 +466,12 @@ pub async fn jira_import_worklogs(
     let mut deleted = 0u32;
     if jql_succeeded {
         let local_synced: Vec<(i64, String, String, String)> = sqlx::query_as(
-            "SELECT id, issue_key, jira_worklog_id, started_at FROM worklogs WHERE sync_status = 'synced' AND jira_worklog_id IS NOT NULL",
+            "SELECT id, issue_key, jira_worklog_id, started_at FROM worklogs \
+             WHERE sync_status = 'synced' AND jira_worklog_id IS NOT NULL \
+             AND started_at >= ?1 AND started_at <= ?2",
         )
+        .bind(&date_from)
+        .bind(&date_to)
         .fetch_all(&state.db)
         .await
         .map_err(|e| e.to_string())?;

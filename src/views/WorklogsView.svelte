@@ -183,7 +183,7 @@
   }
 
   async function backgroundSync() {
-    if (syncing) return;
+    if (syncing || !settingsStore.isConnected) return;
     syncing = true;
     try {
       await worklogsStore.importFromJira(selectedDate);

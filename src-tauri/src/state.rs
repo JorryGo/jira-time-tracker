@@ -6,6 +6,7 @@ pub struct AppState {
     pub db: SqlitePool,
     pub jira_config: Mutex<Option<JiraConfig>>,
     pub window_position: Mutex<Option<(i32, i32)>>,
+    pub cached_account_id: Mutex<Option<String>>,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]

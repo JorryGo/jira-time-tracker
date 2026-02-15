@@ -94,6 +94,7 @@ pub fn run() {
                 db: pool,
                 jira_config: Mutex::new(None),
                 window_position: Mutex::new(saved_window_pos),
+                cached_account_id: Mutex::new(None),
             });
 
             // Build tray icon
