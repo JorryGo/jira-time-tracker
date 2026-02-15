@@ -4,6 +4,8 @@ mod jira;
 mod state;
 
 use sqlx::sqlite::SqlitePoolOptions;
+use std::sync::atomic::Ordering;
+use std::sync::atomic::AtomicBool;
 use std::sync::Mutex;
 use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
@@ -96,6 +98,7 @@ pub fn run() {
                 window_position: Mutex::new(saved_window_pos),
                 cached_account_id: Mutex::new(None),
                 http_client: reqwest::Client::new(),
+                suppress_blur_hide: AtomicBool::new(false),
             });
 
             // Build tray icon
@@ -114,9 +117,17 @@ pub fn run() {
                     {
                         let app = tray.app_handle();
                         if let Some(window) = app.get_webview_window("main") {
-                            if window.is_visible().unwrap_or(false) {
+                            let is_showing = window.is_visible().unwrap_or(false)
+                                && !window.is_minimized().unwrap_or(false);
+                            if is_showing {
                                 let _ = window.hide();
                             } else {
+                                // Suppress blur-hide to prevent race condition:
+                                // tray click can briefly steal focus, triggering blur → hide
+                                app.state::<state::AppState>()
+                                    .suppress_blur_hide
+                                    .store(true, Ordering::SeqCst);
+
                                 // Use saved position if the user has repositioned the window
                                 let saved = *app
                                     .state::<state::AppState>()
@@ -156,6 +167,20 @@ pub fn run() {
                                 let _ = window.show();
                                 let _ = window.set_focus();
 
+                                // On macOS, explicitly activate the app so the window
+                                // appears in front (Accessory apps don't auto-activate).
+                                #[cfg(target_os = "macos")]
+                                {
+                                    use objc2::MainThreadMarker;
+                                    use objc2_app_kit::NSApplication;
+                                    // Tray event handler always runs on the main thread
+                                    if let Some(mtm) = MainThreadMarker::new() {
+                                        let ns_app = NSApplication::sharedApplication(mtm);
+                                        #[allow(deprecated)]
+                                        ns_app.activateIgnoringOtherApps(true);
+                                    }
+                                }
+
                                 // On Windows, explicitly call SetForegroundWindow + SetFocus
                                 // to ensure proper keyboard layout switching when showing from tray.
                                 // Tauri's set_focus() alone doesn't trigger full input locale activation.
@@ -170,6 +195,16 @@ pub fn run() {
                                         }
                                     }
                                 }
+
+                                // Clear suppress flag after the show/focus sequence settles
+                                let app_clone = app.clone();
+                                tauri::async_runtime::spawn(async move {
+                                    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                                    app_clone
+                                        .state::<state::AppState>()
+                                        .suppress_blur_hide
+                                        .store(false, Ordering::SeqCst);
+                                });
                             }
                         }
                     }
@@ -229,27 +264,58 @@ pub fn run() {
                                 });
                             }
                         }
-                        // Debounce hide — on Windows startDragging() briefly loses focus
-                        let window_clone = window.clone();
-                        tauri::async_runtime::spawn(async move {
-                            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-                            if !window_clone.is_focused().unwrap_or(true) {
-                                let _ = window_clone.hide();
-                            }
-                        });
+                        // Skip hide if tray click is in progress (prevents race condition
+                        // where tray show + immediate blur-hide cancel each other out)
+                        let suppressed = window
+                            .app_handle()
+                            .try_state::<state::AppState>()
+                            .map(|s| s.suppress_blur_hide.load(Ordering::SeqCst))
+                            .unwrap_or(false);
+                        if !suppressed {
+                            // Debounce hide — on Windows startDragging() briefly loses focus
+                            let window_clone = window.clone();
+                            tauri::async_runtime::spawn(async move {
+                                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+                                if !window_clone.is_focused().unwrap_or(true) {
+                                    let _ = window_clone.hide();
+                                }
+                            });
+                        }
                     }
                 }
                 WindowEvent::Destroyed => {
                     #[cfg(target_os = "macos")]
                     if window.label() == "calendar" {
+                        // Suppress blur-hide during policy transition: switching to
+                        // Accessory deactivates the app, which fires blur on main window
+                        if let Some(app_state) = window.app_handle().try_state::<state::AppState>() {
+                            app_state.suppress_blur_hide.store(true, Ordering::SeqCst);
+                        }
                         let _ = window
                             .app_handle()
                             .set_activation_policy(tauri::ActivationPolicy::Accessory);
+                        let app_clone = window.app_handle().clone();
+                        tauri::async_runtime::spawn(async move {
+                            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                            if let Some(app_state) = app_clone.try_state::<state::AppState>() {
+                                app_state.suppress_blur_hide.store(false, Ordering::SeqCst);
+                            }
+                        });
                     }
                 }
                 _ => {}
             }
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            // Handle macOS dock icon click: unminimize the calendar window if it exists
+            if let tauri::RunEvent::Reopen { .. } = event {
+                if let Some(calendar) = app.get_webview_window("calendar") {
+                    let _ = calendar.unminimize();
+                    let _ = calendar.show();
+                    let _ = calendar.set_focus();
+                }
+            }
+        });
 }

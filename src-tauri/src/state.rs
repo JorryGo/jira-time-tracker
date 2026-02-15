@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
+use std::sync::atomic::AtomicBool;
 use std::sync::Mutex;
 
 pub struct AppState {
@@ -8,6 +9,7 @@ pub struct AppState {
     pub window_position: Mutex<Option<(i32, i32)>>,
     pub cached_account_id: Mutex<Option<String>>,
     pub http_client: reqwest::Client,
+    pub suppress_blur_hide: AtomicBool,
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]

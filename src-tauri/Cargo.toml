@@ -1,6 +1,6 @@
 [package]
 name = "jira-time-tracker"
-version = "0.1.2"
+version = "0.1.5"
 edition = "2021"
 
 [lib]
@@ -23,6 +23,10 @@ tokio = { version = "1", features = ["full"] }
 sqlx = { version = "0.8", features = ["runtime-tokio", "sqlite"] }
 futures = "0.3"
 tauri-plugin-opener = "2.5.3"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSRunningApplication"] }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.61", features = [
