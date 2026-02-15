@@ -17,26 +17,40 @@
 
 {#if timerStore.current}
   <div class="timer-display" class:running={timerStore.isRunning} class:paused={timerStore.isPaused}>
-    <div class="timer-info">
-      <span class="timer-key">{timerStore.current.issue_key}</span>
-      <span class="timer-summary">{timerStore.issueSummary}</span>
+    <div class="timer-row">
+      <div class="timer-info">
+        <span class="timer-key">{timerStore.current.issue_key}</span>
+        <span class="timer-summary">{timerStore.issueSummary}</span>
+      </div>
+      <div class="timer-controls">
+        <span class="timer-time" class:paused={timerStore.isPaused}>
+          {formatDuration(timerStore.elapsedSeconds)}
+        </span>
+        {#if timerStore.isRunning}
+          <button class="btn-icon" onclick={handlePause} title="Pause">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="3" width="5" height="18" rx="1"/><rect x="14" y="3" width="5" height="18" rx="1"/></svg>
+          </button>
+        {:else}
+          <button class="btn-icon btn-resume" onclick={handleResume} title="Resume">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 3.5v17a1 1 0 0 0 1.5.86l14-8.5a1 1 0 0 0 0-1.72l-14-8.5A1 1 0 0 0 6 3.5z"/></svg>
+          </button>
+        {/if}
+        <button class="btn-icon btn-stop" onclick={handleStop} title="Stop">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+        </button>
+      </div>
     </div>
-    <div class="timer-controls">
-      <span class="timer-time" class:paused={timerStore.isPaused}>
-        {formatDuration(timerStore.elapsedSeconds)}
-      </span>
-      {#if timerStore.isRunning}
-        <button class="btn-icon" onclick={handlePause} title="Pause">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="3" width="5" height="18" rx="1"/><rect x="14" y="3" width="5" height="18" rx="1"/></svg>
-        </button>
-      {:else}
-        <button class="btn-icon btn-resume" onclick={handleResume} title="Resume">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M6 3.5v17a1 1 0 0 0 1.5.86l14-8.5a1 1 0 0 0 0-1.72l-14-8.5A1 1 0 0 0 6 3.5z"/></svg>
-        </button>
-      {/if}
-      <button class="btn-icon btn-stop" onclick={handleStop} title="Stop">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
-      </button>
+    <div class="timer-desc-row">
+      <svg class="desc-icon" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>
+      </svg>
+      <input
+        class="timer-description"
+        type="text"
+        placeholder="What I'm working on..."
+        value={timerStore.description}
+        oninput={(e) => timerStore.updateDescription(e.currentTarget.value)}
+      />
     </div>
   </div>
 {/if}
@@ -44,14 +58,13 @@
 <style>
   .timer-display {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 14px;
+    flex-direction: column;
+    padding: 10px 14px 8px;
     background: var(--timer-gradient);
     color: white;
     border-radius: var(--radius);
     margin: 10px 12px 6px;
-    gap: 8px;
+    gap: 0;
     position: relative;
     overflow: hidden;
     animation: slideDown 0.25s cubic-bezier(0.4, 0, 0.2, 1);
@@ -79,6 +92,13 @@
 
   .timer-display.paused {
     background: var(--timer-gradient-paused);
+  }
+
+  .timer-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
   }
 
   .timer-info {
@@ -121,6 +141,52 @@
     animation: pulse 1.5s ease-in-out infinite;
   }
 
+  /* Description row */
+  .timer-desc-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    position: relative;
+  }
+
+  .desc-icon {
+    opacity: 0.4;
+    flex-shrink: 0;
+    transition: opacity 0.2s ease;
+  }
+
+  .timer-desc-row:focus-within .desc-icon {
+    opacity: 0.7;
+  }
+
+  .timer-description {
+    flex: 1;
+    font-size: 11px;
+    font-family: inherit;
+    color: rgba(255, 255, 255, 0.9) !important;
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0;
+    padding: 1px 0 !important;
+    outline: none;
+    box-shadow: none !important;
+    letter-spacing: 0.1px;
+    transition: color 0.2s ease;
+  }
+
+  .timer-description::placeholder {
+    color: rgba(255, 255, 255, 0.35);
+    font-style: italic;
+  }
+
+  .timer-description:focus {
+    color: white !important;
+  }
+
+  /* Buttons */
   .btn-icon {
     width: 28px;
     height: 28px;

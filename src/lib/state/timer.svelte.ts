@@ -7,7 +7,9 @@ class TimerStore {
   current = $state<TimerState | null>(null);
   issueSummary = $state("");
   elapsedSeconds = $state(0);
+  description = $state("");
   private intervalId: number | null = null;
+  private descriptionTimerId: number | null = null;
 
   get isRunning(): boolean {
     return this.current !== null && !this.current.is_paused;
@@ -26,6 +28,7 @@ class TimerStore {
     const state = await cmd.timerGetState();
     if (state) {
       this.current = state;
+      this.description = state.description;
       this.recalcElapsed();
       if (state.is_paused) {
         cmd.timerSetTrayIcon("paused");
@@ -43,6 +46,7 @@ class TimerStore {
     this.current = await cmd.timerStart(issueKey);
     this.issueSummary = summary;
     this.elapsedSeconds = 0;
+    this.description = "";
     this.startTicking();
     cmd.timerSetTrayIcon("working");
   }
@@ -68,10 +72,22 @@ class TimerStore {
     this.current = null;
     this.issueSummary = "";
     this.elapsedSeconds = 0;
+    this.description = "";
     this.stopTicking();
     await cmd.timerUpdateTray("");
     cmd.timerSetTrayIcon("idle");
     return result;
+  }
+
+  updateDescription(text: string) {
+    this.description = text;
+    if (this.descriptionTimerId) {
+      clearTimeout(this.descriptionTimerId);
+    }
+    this.descriptionTimerId = window.setTimeout(() => {
+      cmd.timerUpdateDescription(text);
+      this.descriptionTimerId = null;
+    }, 500);
   }
 
   private startTicking() {

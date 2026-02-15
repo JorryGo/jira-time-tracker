@@ -36,6 +36,7 @@ pub fn run() {
             commands::timer::timer_stop,
             commands::timer::timer_get_state,
             commands::timer::timer_update_tray,
+            commands::timer::timer_update_description,
             commands::timer::timer_set_tray_icon,
             commands::worklogs::get_worklogs,
             commands::worklogs::create_worklog,

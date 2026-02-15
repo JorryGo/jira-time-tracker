@@ -26,6 +26,10 @@ export async function timerUpdateTray(displayText: string): Promise<void> {
   return invoke("timer_update_tray", { displayText });
 }
 
+export async function timerUpdateDescription(description: string): Promise<void> {
+  return invoke("timer_update_description", { description });
+}
+
 export async function timerSetTrayIcon(iconName: string): Promise<void> {
   return invoke("timer_set_tray_icon", { iconName });
 }

@@ -4,4 +4,5 @@ export interface TimerState {
   accumulated_secs: number;
   is_paused: boolean;
   paused_at: string | null;
+  description: string;
 }

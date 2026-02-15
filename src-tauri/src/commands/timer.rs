@@ -11,6 +11,7 @@ pub struct TimerState {
     pub accumulated_secs: i64,
     pub is_paused: bool,
     pub paused_at: Option<String>,
+    pub description: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -24,19 +25,20 @@ pub struct StoppedWorklog {
 pub async fn timer_get_state(
     state: State<'_, AppState>,
 ) -> Result<Option<TimerState>, String> {
-    let row: Option<(String, String, i64, bool, Option<String>)> = sqlx::query_as(
-        "SELECT issue_key, started_at, accumulated_secs, is_paused, paused_at FROM active_timer WHERE id = 1",
+    let row: Option<(String, String, i64, bool, Option<String>, String)> = sqlx::query_as(
+        "SELECT issue_key, started_at, accumulated_secs, is_paused, paused_at, description FROM active_timer WHERE id = 1",
     )
     .fetch_optional(&state.db)
     .await
     .map_err(|e| e.to_string())?;
 
-    Ok(row.map(|(issue_key, started_at, accumulated_secs, is_paused, paused_at)| TimerState {
+    Ok(row.map(|(issue_key, started_at, accumulated_secs, is_paused, paused_at, description)| TimerState {
         issue_key,
         started_at,
         accumulated_secs,
         is_paused,
         paused_at,
+        description,
     }))
 }
 
@@ -48,14 +50,14 @@ pub async fn timer_start(
     let mut tx = state.db.begin().await.map_err(|e| e.to_string())?;
 
     // If timer is running, stop it first (inlined to use transaction)
-    let existing: Option<(String, String, i64, bool, Option<String>)> = sqlx::query_as(
-        "SELECT issue_key, started_at, accumulated_secs, is_paused, paused_at FROM active_timer WHERE id = 1",
+    let existing: Option<(String, String, i64, bool, Option<String>, String)> = sqlx::query_as(
+        "SELECT issue_key, started_at, accumulated_secs, is_paused, paused_at, description FROM active_timer WHERE id = 1",
     )
     .fetch_optional(&mut *tx)
     .await
     .map_err(|e| e.to_string())?;
 
-    if let Some((old_key, started_at, accumulated, is_paused, _)) = existing {
+    if let Some((old_key, started_at, accumulated, is_paused, _, old_description)) = existing {
         let total_secs = if is_paused {
             accumulated
         } else {
@@ -79,11 +81,12 @@ pub async fn timer_start(
 
         sqlx::query(
             "INSERT INTO worklogs (issue_key, started_at, duration_seconds, description, sync_status) \
-             VALUES (?1, ?2, ?3, '', 'pending')",
+             VALUES (?1, ?2, ?3, ?4, 'pending')",
         )
         .bind(&old_key)
         .bind(&started_str)
         .bind(total_secs)
+        .bind(&old_description)
         .execute(&mut *tx)
         .await
         .map_err(|e| e.to_string())?;
@@ -96,8 +99,8 @@ pub async fn timer_start(
 
     let now = Utc::now().to_rfc3339();
     sqlx::query(
-        "INSERT OR REPLACE INTO active_timer (id, issue_key, started_at, accumulated_secs, is_paused, paused_at) \
-         VALUES (1, ?1, ?2, 0, 0, NULL)",
+        "INSERT OR REPLACE INTO active_timer (id, issue_key, started_at, accumulated_secs, is_paused, paused_at, description) \
+         VALUES (1, ?1, ?2, 0, 0, NULL, '')",
     )
     .bind(&issue_key)
     .bind(&now)
@@ -113,6 +116,7 @@ pub async fn timer_start(
         accumulated_secs: 0,
         is_paused: false,
         paused_at: None,
+        description: String::new(),
     })
 }
 
@@ -120,15 +124,15 @@ pub async fn timer_start(
 pub async fn timer_pause(
     state: State<'_, AppState>,
 ) -> Result<TimerState, String> {
-    let row: (String, String, i64, bool, Option<String>) = sqlx::query_as(
-        "SELECT issue_key, started_at, accumulated_secs, is_paused, paused_at FROM active_timer WHERE id = 1",
+    let row: (String, String, i64, bool, Option<String>, String) = sqlx::query_as(
+        "SELECT issue_key, started_at, accumulated_secs, is_paused, paused_at, description FROM active_timer WHERE id = 1",
     )
     .fetch_optional(&state.db)
     .await
     .map_err(|e| e.to_string())?
     .ok_or("No active timer")?;
 
-    let (issue_key, started_at, accumulated, is_paused, _) = row;
+    let (issue_key, started_at, accumulated, is_paused, _, description) = row;
     if is_paused {
         return Err("Timer is already paused".to_string());
     }
@@ -155,6 +159,7 @@ pub async fn timer_pause(
         accumulated_secs: new_accumulated,
         is_paused: true,
         paused_at: Some(now_str),
+        description,
     })
 }
 
@@ -162,15 +167,15 @@ pub async fn timer_pause(
 pub async fn timer_resume(
     state: State<'_, AppState>,
 ) -> Result<TimerState, String> {
-    let row: (String, String, i64, bool, Option<String>) = sqlx::query_as(
-        "SELECT issue_key, started_at, accumulated_secs, is_paused, paused_at FROM active_timer WHERE id = 1",
+    let row: (String, String, i64, bool, Option<String>, String) = sqlx::query_as(
+        "SELECT issue_key, started_at, accumulated_secs, is_paused, paused_at, description FROM active_timer WHERE id = 1",
     )
     .fetch_optional(&state.db)
     .await
     .map_err(|e| e.to_string())?
     .ok_or("No active timer")?;
 
-    let (issue_key, _, accumulated, is_paused, _) = row;
+    let (issue_key, _, accumulated, is_paused, _, description) = row;
     if !is_paused {
         return Err("Timer is not paused".to_string());
     }
@@ -191,19 +196,20 @@ pub async fn timer_resume(
         accumulated_secs: accumulated,
         is_paused: false,
         paused_at: None,
+        description,
     })
 }
 
 async fn stop_timer_internal(db: &SqlitePool) -> Result<StoppedWorklog, String> {
-    let row: (String, String, i64, bool, Option<String>) = sqlx::query_as(
-        "SELECT issue_key, started_at, accumulated_secs, is_paused, paused_at FROM active_timer WHERE id = 1",
+    let row: (String, String, i64, bool, Option<String>, String) = sqlx::query_as(
+        "SELECT issue_key, started_at, accumulated_secs, is_paused, paused_at, description FROM active_timer WHERE id = 1",
     )
     .fetch_optional(db)
     .await
     .map_err(|e| e.to_string())?
     .ok_or("No active timer")?;
 
-    let (issue_key, started_at, accumulated, is_paused, _) = row;
+    let (issue_key, started_at, accumulated, is_paused, _, description) = row;
 
     let total_secs = if is_paused {
         accumulated
@@ -229,11 +235,12 @@ async fn stop_timer_internal(db: &SqlitePool) -> Result<StoppedWorklog, String> 
     // Create worklog
     let result = sqlx::query(
         "INSERT INTO worklogs (issue_key, started_at, duration_seconds, description, sync_status) \
-         VALUES (?1, ?2, ?3, '', 'pending')",
+         VALUES (?1, ?2, ?3, ?4, 'pending')",
     )
     .bind(&issue_key)
     .bind(&started_str)
     .bind(total_secs)
+    .bind(&description)
     .execute(db)
     .await
     .map_err(|e| e.to_string())?;
@@ -268,6 +275,19 @@ pub async fn timer_update_tray(
     if let Some(tray) = app_handle.tray_by_id("main-tray") {
         tray.set_title(Some(&display_text)).map_err(|e| e.to_string())?;
     }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn timer_update_description(
+    state: State<'_, AppState>,
+    description: String,
+) -> Result<(), String> {
+    sqlx::query("UPDATE active_timer SET description = ?1 WHERE id = 1")
+        .bind(&description)
+        .execute(&state.db)
+        .await
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 

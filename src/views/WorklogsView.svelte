@@ -106,10 +106,13 @@
     const grouped = new Map<string, { summary: string | null; totalSeconds: number; descriptions: { text: string; seconds: number }[] }>();
 
     if (showInProgress && timerStore.current) {
+      const desc = timerStore.description
+        ? `${timerStore.description} (in progress)`
+        : "(in progress)";
       grouped.set(timerStore.current.issue_key, {
         summary: timerStore.issueSummary || null,
         totalSeconds: timerStore.elapsedSeconds,
-        descriptions: [{ text: "(in progress)", seconds: timerStore.elapsedSeconds }],
+        descriptions: [{ text: desc, seconds: timerStore.elapsedSeconds }],
       });
     }
 
@@ -332,6 +335,13 @@
           <div class="wl-meta">
             <span>{formatTimeOpen(timerStore.elapsedSeconds)}</span>
           </div>
+          <input
+            class="wl-desc-input"
+            type="text"
+            placeholder="What I'm working on..."
+            value={timerStore.description}
+            oninput={(e) => timerStore.updateDescription(e.currentTarget.value)}
+          />
         </div>
         <div class="wl-actions"></div>
       </div>
@@ -363,7 +373,15 @@
           <div class="wl-meta">
             <span>{formatTimeRange(wl.started_at, wl.duration_seconds)}</span>
           </div>
-          {#if wl.description}
+          {#if wl.sync_status === "pending"}
+            <input
+              class="wl-desc-input"
+              type="text"
+              placeholder="What I worked on..."
+              value={wl.description}
+              oninput={(e) => worklogsStore.updateDescription(wl.id, e.currentTarget.value)}
+            />
+          {:else if wl.description}
             <div class="wl-desc">{wl.description}</div>
           {/if}
         </div>
@@ -742,15 +760,40 @@
   .wl-desc {
     font-size: 11px;
     color: var(--text-secondary);
-    margin-top: 3px;
-    padding: 3px 8px;
-    background: color-mix(in srgb, var(--bg-secondary) 60%, transparent);
+    margin-top: 6px;
+    padding: 4px 8px;
+    background: color-mix(in srgb, var(--bg-secondary) 40%, transparent);
     border-radius: var(--radius-sm);
     border-left: 2px solid color-mix(in srgb, var(--border) 60%, transparent);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     font-style: italic;
+  }
+
+  .wl-desc-input {
+    font-size: 11px;
+    color: var(--text-secondary) !important;
+    margin-top: 6px;
+    padding: 4px 8px !important;
+    background: transparent !important;
+    border: 1px dashed color-mix(in srgb, var(--border) 50%, transparent) !important;
+    border-radius: var(--radius-sm);
+    box-shadow: none !important;
+    width: 100%;
+    transition: all 0.2s ease;
+  }
+
+  .wl-desc-input::placeholder {
+    color: var(--text-secondary);
+    opacity: 0.4;
+  }
+
+  .wl-desc-input:focus {
+    color: var(--text) !important;
+    background: color-mix(in srgb, var(--bg-secondary) 60%, transparent) !important;
+    border-style: solid !important;
+    border-color: color-mix(in srgb, var(--accent) 50%, transparent) !important;
   }
 
   .wl-actions {

@@ -75,5 +75,10 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .execute(pool)
     .await;
 
+    // Add description column to active_timer
+    let _ = sqlx::query("ALTER TABLE active_timer ADD COLUMN description TEXT NOT NULL DEFAULT ''")
+        .execute(pool)
+        .await;
+
     Ok(())
 }

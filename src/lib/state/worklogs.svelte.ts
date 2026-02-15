@@ -7,6 +7,7 @@ class WorklogsStore {
   isLoading = $state(false);
   selectedIds = $state<Set<number>>(new Set());
   private lastFilter: WorklogFilter | undefined = undefined;
+  private descTimers = new Map<number, number>();
 
   get pendingCount(): number {
     return this.items.filter((w) => w.sync_status === "pending").length;
@@ -98,6 +99,21 @@ class WorklogsStore {
     this.selectedIds = new Set();
     await this.refresh();
     return result;
+  }
+
+  updateDescription(id: number, description: string) {
+    const item = this.items.find((w) => w.id === id);
+    if (item) item.description = description;
+
+    const prev = this.descTimers.get(id);
+    if (prev) clearTimeout(prev);
+    this.descTimers.set(
+      id,
+      window.setTimeout(() => {
+        cmd.updateWorklog(id, undefined, description, undefined);
+        this.descTimers.delete(id);
+      }, 500),
+    );
   }
 
   toggleSelect(id: number) {
