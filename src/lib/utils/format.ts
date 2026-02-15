@@ -6,8 +6,9 @@ export function formatDuration(totalSeconds: number): string {
 }
 
 export function formatDurationShort(totalSeconds: number): string {
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
+  const totalMinutes = Math.ceil(totalSeconds / 60);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
   if (h > 0) return `${h}h ${m}m`;
   return `${m}m`;
 }

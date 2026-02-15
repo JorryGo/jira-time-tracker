@@ -386,9 +386,9 @@ pub async fn jira_import_worklogs(
 
             match existing_map.get(&entry.id) {
                 None => {
-                    // New worklog — insert
+                    // New worklog — insert (OR IGNORE to handle concurrent imports)
                     sqlx::query(
-                        "INSERT INTO worklogs (issue_key, started_at, duration_seconds, description, sync_status, jira_worklog_id, jira_updated_at) \
+                        "INSERT OR IGNORE INTO worklogs (issue_key, started_at, duration_seconds, description, sync_status, jira_worklog_id, jira_updated_at) \
                          VALUES (?1, ?2, ?3, ?4, 'synced', ?5, ?6)",
                     )
                     .bind(issue_key)

@@ -153,6 +153,7 @@
     setTimeout(() => (copied = false), 2000);
   }
 
+  let syncing = $state(false);
   let confirmDeleteId = $state<number | null>(null);
   let confirmDeleteSynced = $state(false);
 
@@ -179,10 +180,14 @@
   }
 
   async function backgroundSync() {
+    if (syncing) return;
+    syncing = true;
     try {
       await worklogsStore.importFromJira(selectedDate);
     } catch (e) {
       console.warn("Background sync failed:", e);
+    } finally {
+      syncing = false;
     }
   }
 

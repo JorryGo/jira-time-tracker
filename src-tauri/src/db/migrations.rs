@@ -59,5 +59,21 @@ pub async fn run_migrations(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         .execute(pool)
         .await;
 
+    // Deduplicate worklogs with same jira_worklog_id (keep the oldest)
+    let _ = sqlx::query(
+        "DELETE FROM worklogs WHERE jira_worklog_id IS NOT NULL AND id NOT IN \
+         (SELECT MIN(id) FROM worklogs WHERE jira_worklog_id IS NOT NULL GROUP BY jira_worklog_id)",
+    )
+    .execute(pool)
+    .await;
+
+    // Prevent future duplicates
+    let _ = sqlx::query(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_worklogs_jira_id_unique \
+         ON worklogs(jira_worklog_id) WHERE jira_worklog_id IS NOT NULL",
+    )
+    .execute(pool)
+    .await;
+
     Ok(())
 }
