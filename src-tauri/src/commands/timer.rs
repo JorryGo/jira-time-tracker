@@ -270,6 +270,11 @@ pub async fn timer_set_tray_icon(
     let icon = tauri::image::Image::from_bytes(icon_bytes).map_err(|e| e.to_string())?;
     if let Some(tray) = app_handle.tray_by_id("main-tray") {
         tray.set_icon(Some(icon)).map_err(|e| e.to_string())?;
+        // On macOS: idle uses template mode (adapts to menu bar theme),
+        // working/paused show their actual colors (green/orange)
+        let as_template = cfg!(target_os = "macos") && icon_name == "idle";
+        tray.set_icon_as_template(as_template)
+            .map_err(|e| e.to_string())?;
     }
     Ok(())
 }

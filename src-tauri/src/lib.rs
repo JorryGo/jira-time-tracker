@@ -111,7 +111,7 @@ pub fn run() {
             // Build tray icon
             let _tray = TrayIconBuilder::with_id("main-tray")
                 .icon(tauri::image::Image::from_bytes(include_bytes!("../icons/tray-idle.png")).unwrap())
-                .icon_as_template(true)
+                .icon_as_template(cfg!(target_os = "macos"))
                 .tooltip("Jira Time Tracker")
                 .menu(&menu)
                 .show_menu_on_left_click(false)
@@ -128,15 +128,20 @@ pub fn run() {
                                         .suppress_blur_hide
                                         .store(true, Ordering::SeqCst);
 
-                                    let saved = *app
-                                        .state::<state::AppState>()
-                                        .window_position
-                                        .lock()
-                                        .unwrap_or_else(|e| e.into_inner());
-                                    if let Some((x, y)) = saved {
-                                        let _ = window.set_position(tauri::Position::Physical(
-                                            tauri::PhysicalPosition::new(x, y),
-                                        ));
+                                    // Restore saved position (skip on Linux — Wayland
+                                    // does not allow clients to position windows)
+                                    #[cfg(not(target_os = "linux"))]
+                                    {
+                                        let saved = *app
+                                            .state::<state::AppState>()
+                                            .window_position
+                                            .lock()
+                                            .unwrap_or_else(|e| e.into_inner());
+                                        if let Some((x, y)) = saved {
+                                            let _ = window.set_position(tauri::Position::Physical(
+                                                tauri::PhysicalPosition::new(x, y),
+                                            ));
+                                        }
                                     }
 
                                     let _ = window.show();
@@ -230,16 +235,20 @@ pub fn run() {
                                     .lock()
                                     .unwrap_or_else(|e| e.into_inner());
                                 if let Some((x, y)) = saved {
-                                    let _ = window.set_position(tauri::Position::Physical(
-                                        tauri::PhysicalPosition::new(x, y),
-                                    ));
+                                    // Skip on Linux — Wayland does not allow client-side positioning
+                                    #[cfg(not(target_os = "linux"))]
+                                    {
+                                        let _ = window.set_position(tauri::Position::Physical(
+                                            tauri::PhysicalPosition::new(x, y),
+                                        ));
+                                    }
                                 } else {
                                     // First launch: position relative to tray icon
                                     #[cfg(target_os = "macos")]
                                     {
                                         let _ = window.move_window(Position::TrayBottomCenter);
                                     }
-                                    #[cfg(not(target_os = "macos"))]
+                                    #[cfg(target_os = "windows")]
                                     {
                                         if let Ok(win_size) = window.outer_size() {
                                             let win_w = win_size.width as f64;
@@ -308,19 +317,25 @@ pub fn run() {
 
             // Show window on startup so the user sees the app immediately
             if let Some(window) = app.get_webview_window("main") {
-                let saved = *app
-                    .state::<state::AppState>()
-                    .window_position
-                    .lock()
-                    .unwrap_or_else(|e| e.into_inner());
-                if let Some((x, y)) = saved {
-                    let _ = window.set_position(tauri::Position::Physical(
-                        tauri::PhysicalPosition::new(x, y),
-                    ));
+                // On Linux/Wayland, skip set_position (clients cannot position windows)
+                // and disable alwaysOnTop which can cause Wayland protocol errors
+                #[cfg(target_os = "linux")]
+                {
+                    let _ = window.set_always_on_top(false);
                 }
-                // Note: on first launch with no saved position, we skip tray-relative positioning
-                // because tray position isn't available yet. The window will use its default
-                // centered position and get repositioned on the next tray click.
+                #[cfg(not(target_os = "linux"))]
+                {
+                    let saved = *app
+                        .state::<state::AppState>()
+                        .window_position
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner());
+                    if let Some((x, y)) = saved {
+                        let _ = window.set_position(tauri::Position::Physical(
+                            tauri::PhysicalPosition::new(x, y),
+                        ));
+                    }
+                }
                 let _ = window.show();
                 let _ = window.set_focus();
             }
@@ -339,7 +354,9 @@ pub fn run() {
                 }
                 WindowEvent::Focused(false) => {
                     if window.label() == "main" {
-                        // Persist position to SQLite
+                        // Persist position to SQLite (skip on Linux — Wayland doesn't
+                        // support client-side positioning so saved position is unused)
+                        #[cfg(not(target_os = "linux"))]
                         if let Some(app_state) = window.try_state::<state::AppState>() {
                             let saved = *app_state.window_position.lock().unwrap_or_else(|e| e.into_inner());
                             if let Some((x, y)) = saved {
