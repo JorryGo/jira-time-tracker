@@ -376,6 +376,11 @@ pub fn run() {
                                 });
                             }
                         }
+                        // On Linux, skip blur-hide entirely — native widgets (<select>,
+                        // date pickers) cause focus loss that breaks the UX. Users hide
+                        // the window via the tray menu or the in-app hide button instead.
+                        #[cfg(not(target_os = "linux"))]
+                        {
                         // Skip hide if tray click is in progress (prevents race condition
                         // where tray show + immediate blur-hide cancel each other out)
                         let suppressed = window
@@ -393,6 +398,7 @@ pub fn run() {
                                 }
                             });
                         }
+                        } // #[cfg(not(target_os = "linux"))]
                     }
                 }
                 WindowEvent::Destroyed => {
