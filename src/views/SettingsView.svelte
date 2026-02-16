@@ -2,6 +2,10 @@
   import { settingsStore } from "../lib/state/settings.svelte";
   import { tasksStore } from "../lib/state/tasks.svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
+  import { getVersion } from "@tauri-apps/api/app";
+
+  let appVersion = $state("");
+  getVersion().then((v) => (appVersion = v));
 
   const isMac = navigator.platform.toUpperCase().includes("MAC");
 
@@ -248,7 +252,7 @@
   </section>
 
   <section class="about">
-    <p>Jira Time Tracker v0.1.5</p>
+    <p>Jira Time Tracker v{appVersion}</p>
   </section>
 </div>
 

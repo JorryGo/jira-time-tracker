@@ -8,6 +8,7 @@ use std::sync::atomic::Ordering;
 use std::sync::atomic::AtomicBool;
 use std::sync::Mutex;
 use tauri::{
+    menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager, WindowEvent,
 };
@@ -101,11 +102,105 @@ pub fn run() {
                 suppress_blur_hide: AtomicBool::new(false),
             });
 
+            // Build tray context menu (required on Linux for icon visibility)
+            let show_hide = MenuItem::with_id(app, "show-hide", "Show/Hide", true, None::<&str>)?;
+            let separator = PredefinedMenuItem::separator(app)?;
+            let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show_hide, &separator, &quit])?;
+
             // Build tray icon
             let _tray = TrayIconBuilder::with_id("main-tray")
                 .icon(tauri::image::Image::from_bytes(include_bytes!("../icons/tray-idle.png")).unwrap())
                 .icon_as_template(true)
                 .tooltip("Jira Time Tracker")
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| {
+                    match event.id().as_ref() {
+                        "show-hide" => {
+                            if let Some(window) = app.get_webview_window("main") {
+                                let is_showing = window.is_visible().unwrap_or(false)
+                                    && !window.is_minimized().unwrap_or(false);
+                                if is_showing {
+                                    let _ = window.hide();
+                                } else {
+                                    app.state::<state::AppState>()
+                                        .suppress_blur_hide
+                                        .store(true, Ordering::SeqCst);
+
+                                    let saved = *app
+                                        .state::<state::AppState>()
+                                        .window_position
+                                        .lock()
+                                        .unwrap_or_else(|e| e.into_inner());
+                                    if let Some((x, y)) = saved {
+                                        let _ = window.set_position(tauri::Position::Physical(
+                                            tauri::PhysicalPosition::new(x, y),
+                                        ));
+                                    }
+
+                                    let _ = window.show();
+                                    let _ = window.set_focus();
+
+                                    #[cfg(target_os = "macos")]
+                                    {
+                                        use objc2::MainThreadMarker;
+                                        use objc2_app_kit::NSApplication;
+                                        if let Some(mtm) = MainThreadMarker::new() {
+                                            let ns_app = NSApplication::sharedApplication(mtm);
+                                            #[allow(deprecated)]
+                                            ns_app.activateIgnoringOtherApps(true);
+                                        }
+                                    }
+
+                                    #[cfg(target_os = "windows")]
+                                    {
+                                        use windows::Win32::UI::WindowsAndMessaging::SetForegroundWindow;
+                                        use windows::Win32::UI::Input::KeyboardAndMouse::SetFocus;
+                                        if let Ok(hwnd) = window.hwnd() {
+                                            unsafe {
+                                                let _ = SetForegroundWindow(hwnd);
+                                                let _ = SetFocus(Some(hwnd));
+                                            }
+                                        }
+                                    }
+
+                                    let app_clone = app.clone();
+                                    tauri::async_runtime::spawn(async move {
+                                        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+                                        app_clone
+                                            .state::<state::AppState>()
+                                            .suppress_blur_hide
+                                            .store(false, Ordering::SeqCst);
+                                    });
+                                }
+                            }
+                        }
+                        "quit" => {
+                            if let Some(app_state) = app.try_state::<state::AppState>() {
+                                let saved = *app_state.window_position.lock().unwrap_or_else(|e| e.into_inner());
+                                if let Some((x, y)) = saved {
+                                    let db = app_state.db.clone();
+                                    let val = format!("{},{}", x, y);
+                                    let app_clone = app.clone();
+                                    tauri::async_runtime::spawn(async move {
+                                        let _ = sqlx::query(
+                                            "INSERT INTO settings (key, value) VALUES ('window_position', ?1) \
+                                             ON CONFLICT(key) DO UPDATE SET value = ?1",
+                                        )
+                                        .bind(val)
+                                        .execute(&db)
+                                        .await;
+                                        app_clone.exit(0);
+                                    });
+                                    return;
+                                }
+                            }
+                            app.exit(0);
+                        }
+                        _ => {}
+                    }
+                })
                 .on_tray_icon_event(|tray, event| {
                     tauri_plugin_positioner::on_tray_event(tray.app_handle(), &event);
                     if let TrayIconEvent::Click {
