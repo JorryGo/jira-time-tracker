@@ -317,14 +317,11 @@ pub fn run() {
 
             // Show window on startup so the user sees the app immediately
             if let Some(window) = app.get_webview_window("main") {
-                // On Linux/Wayland, skip set_position (clients cannot position windows)
-                // and disable alwaysOnTop which can cause Wayland protocol errors
-                #[cfg(target_os = "linux")]
-                {
-                    let _ = window.set_always_on_top(false);
-                }
+                // On non-Linux, set alwaysOnTop programmatically (removed from
+                // tauri.conf.json because Wayland rejects it at window creation)
                 #[cfg(not(target_os = "linux"))]
                 {
+                    let _ = window.set_always_on_top(true);
                     let saved = *app
                         .state::<state::AppState>()
                         .window_position
@@ -354,9 +351,7 @@ pub fn run() {
                 }
                 WindowEvent::Focused(false) => {
                     if window.label() == "main" {
-                        // Persist position to SQLite (skip on Linux — Wayland doesn't
-                        // support client-side positioning so saved position is unused)
-                        #[cfg(not(target_os = "linux"))]
+                        // Persist position to SQLite on all platforms
                         if let Some(app_state) = window.try_state::<state::AppState>() {
                             let saved = *app_state.window_position.lock().unwrap_or_else(|e| e.into_inner());
                             if let Some((x, y)) = saved {

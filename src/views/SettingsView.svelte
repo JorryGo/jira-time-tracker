@@ -138,7 +138,7 @@
         <input type="password" bind:value={apiToken} placeholder="Your Jira API token" />
       </label>
       <span class="field-hint">
-        <button class="btn-link" onclick={() => openUrl("https://id.atlassian.com/manage-profile/security/api-tokens")}>
+        <button class="btn-link" onclick={() => openUrl("https://id.atlassian.com/manage-profile/security/api-tokens").catch(() => window.open("https://id.atlassian.com/manage-profile/security/api-tokens", "_blank"))}>
           Get token
         </button>
       </span>
