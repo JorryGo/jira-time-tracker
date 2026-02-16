@@ -17,6 +17,14 @@ use tauri_plugin_positioner::{Position, WindowExt};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Force X11 backend on Linux — WebKitGTK triggers Wayland protocol errors
+    // (Error 71) with tray-based apps due to unsupported surface operations.
+    // XWayland provides full compatibility without requiring elevated privileges.
+    #[cfg(target_os = "linux")]
+    if std::env::var("GDK_BACKEND").is_err() {
+        std::env::set_var("GDK_BACKEND", "x11");
+    }
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_positioner::init())
@@ -128,20 +136,16 @@ pub fn run() {
                                         .suppress_blur_hide
                                         .store(true, Ordering::SeqCst);
 
-                                    // Restore saved position (skip on Linux — Wayland
-                                    // does not allow clients to position windows)
-                                    #[cfg(not(target_os = "linux"))]
-                                    {
-                                        let saved = *app
-                                            .state::<state::AppState>()
-                                            .window_position
-                                            .lock()
-                                            .unwrap_or_else(|e| e.into_inner());
-                                        if let Some((x, y)) = saved {
-                                            let _ = window.set_position(tauri::Position::Physical(
-                                                tauri::PhysicalPosition::new(x, y),
-                                            ));
-                                        }
+                                    // Restore saved position
+                                    let saved = *app
+                                        .state::<state::AppState>()
+                                        .window_position
+                                        .lock()
+                                        .unwrap_or_else(|e| e.into_inner());
+                                    if let Some((x, y)) = saved {
+                                        let _ = window.set_position(tauri::Position::Physical(
+                                            tauri::PhysicalPosition::new(x, y),
+                                        ));
                                     }
 
                                     let _ = window.show();
@@ -235,13 +239,9 @@ pub fn run() {
                                     .lock()
                                     .unwrap_or_else(|e| e.into_inner());
                                 if let Some((x, y)) = saved {
-                                    // Skip on Linux — Wayland does not allow client-side positioning
-                                    #[cfg(not(target_os = "linux"))]
-                                    {
-                                        let _ = window.set_position(tauri::Position::Physical(
-                                            tauri::PhysicalPosition::new(x, y),
-                                        ));
-                                    }
+                                    let _ = window.set_position(tauri::Position::Physical(
+                                        tauri::PhysicalPosition::new(x, y),
+                                    ));
                                 } else {
                                     // First launch: position relative to tray icon
                                     #[cfg(target_os = "macos")]
@@ -317,21 +317,23 @@ pub fn run() {
 
             // Show window on startup so the user sees the app immediately
             if let Some(window) = app.get_webview_window("main") {
-                // On non-Linux, set alwaysOnTop programmatically (removed from
-                // tauri.conf.json because Wayland rejects it at window creation)
+                // alwaysOnTop and skipTaskbar are set programmatically (not in
+                // tauri.conf.json) so they don't run before the X11 backend is active
                 #[cfg(not(target_os = "linux"))]
                 {
                     let _ = window.set_always_on_top(true);
-                    let saved = *app
-                        .state::<state::AppState>()
-                        .window_position
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner());
-                    if let Some((x, y)) = saved {
-                        let _ = window.set_position(tauri::Position::Physical(
-                            tauri::PhysicalPosition::new(x, y),
-                        ));
-                    }
+                    let _ = window.set_skip_taskbar(true);
+                }
+                // Restore saved window position
+                let saved = *app
+                    .state::<state::AppState>()
+                    .window_position
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner());
+                if let Some((x, y)) = saved {
+                    let _ = window.set_position(tauri::Position::Physical(
+                        tauri::PhysicalPosition::new(x, y),
+                    ));
                 }
                 let _ = window.show();
                 let _ = window.set_focus();
