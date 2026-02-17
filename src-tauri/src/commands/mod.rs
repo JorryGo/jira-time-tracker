@@ -1,6 +1,7 @@
 pub mod jira;
 pub mod settings;
 pub mod timer;
+pub mod updater;
 pub mod worklogs;
 
 use tauri::Manager;

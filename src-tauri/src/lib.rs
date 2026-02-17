@@ -53,6 +53,7 @@ pub fn run() {
             commands::worklogs::create_worklog,
             commands::worklogs::update_worklog,
             commands::worklogs::delete_worklog,
+            commands::updater::check_for_update,
             commands::quit_app,
             commands::set_dock_visible,
             commands::focus_calendar,

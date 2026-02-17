@@ -1,6 +1,7 @@
 <script lang="ts">
   import { settingsStore } from "../lib/state/settings.svelte";
   import { tasksStore } from "../lib/state/tasks.svelte";
+  import { updaterStore } from "../lib/state/updater.svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
   import { getVersion } from "@tauri-apps/api/app";
 
@@ -253,6 +254,21 @@
 
   <section class="about">
     <p>Jira Time Tracker v{appVersion}</p>
+    {#if updaterStore.updateAvailable}
+      <div class="update-banner">
+        <span>v{updaterStore.latestVersion} available</span>
+        <button class="btn-link" onclick={() => openUrl(updaterStore.releaseUrl).catch(() => window.open(updaterStore.releaseUrl, "_blank"))}>
+          Download
+        </button>
+      </div>
+    {/if}
+    <button
+      class="btn-check-update"
+      onclick={() => updaterStore.check(true)}
+      disabled={updaterStore.checking}
+    >
+      {updaterStore.checking ? "Checking..." : "Check for updates"}
+    </button>
   </section>
 </div>
 
@@ -406,6 +422,37 @@
     background: transparent;
     border: none;
     padding: 0;
+  }
+
+  .update-banner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 6px;
+    padding: 6px 10px;
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    border-radius: var(--radius-sm);
+    border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+    font-size: 11px;
+    color: var(--text);
+  }
+
+  .btn-check-update {
+    margin-top: 6px;
+    font-size: 10px;
+    color: var(--text-secondary);
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+    transition: color var(--transition-fast);
+  }
+
+  .btn-check-update:hover:not(:disabled) {
+    color: var(--accent);
+  }
+
+  .btn-check-update:disabled {
+    opacity: 0.5;
   }
 
   .section-hint {

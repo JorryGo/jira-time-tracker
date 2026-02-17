@@ -8,6 +8,7 @@
   import CalendarView from "./views/CalendarView.svelte";
   import { timerStore } from "./lib/state/timer.svelte";
   import { worklogsStore } from "./lib/state/worklogs.svelte";
+  import { updaterStore } from "./lib/state/updater.svelte";
 
   const isCalendarWindow = new URLSearchParams(window.location.search).get("view") === "calendar";
 
@@ -23,6 +24,7 @@
 
   onMount(() => {
     if (isCalendarWindow) return;
+    updaterStore.check();
     const unlisten = getCurrentWindow().onFocusChanged(({ payload: focused }) => {
       if (!focused) {
         timerStore.flushPendingDescription();
