@@ -147,7 +147,7 @@
       const start = new Date(wl.started_at).getTime();
       let placed = false;
       for (let i = 0; i < laneEnds.length; i++) {
-        if (start >= laneEnds[i]) {
+        if (Math.floor(start / 60_000) >= Math.floor(laneEnds[i] / 60_000)) {
           lanes.set(wl.id, i);
           laneEnds[i] = start + wl.duration_seconds * 1000;
           placed = true;
