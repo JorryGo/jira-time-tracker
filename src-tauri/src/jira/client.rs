@@ -36,6 +36,23 @@ impl JiraClient {
             .map_err(|e| format!("Failed to parse response: {}", e))
     }
 
+    pub async fn verify_auth(&self) -> Result<(), String> {
+        let resp = self
+            .client
+            .get(format!("{}/rest/api/3/myself", self.base_url))
+            .header("Authorization", &self.auth_header)
+            .header("Accept", "application/json")
+            .send()
+            .await
+            .map_err(|e| format!("Request failed: {}", e))?;
+        if resp.status() == 401 || resp.status() == 403 {
+            return Err("API token expired or invalid. Please update it in Settings.".to_string());
+        }
+        resp.error_for_status()
+            .map_err(|e| format!("Jira API error: {}", e))?;
+        Ok(())
+    }
+
     pub async fn search_issues(
         &self,
         jql: &str,
@@ -65,6 +82,12 @@ impl JiraClient {
 
         let resp: JiraSearchResponse = serde_json::from_str(&raw)
             .map_err(|e| format!("Failed to parse response: {}. Body preview: {}", e, &raw[..raw.len().min(500)]))?;
+
+        // The /search/jql endpoint silently returns empty results instead of 401
+        // when the API token is invalid. Detect this and return a clear error.
+        if resp.issues.is_empty() {
+            self.verify_auth().await?;
+        }
 
         Ok(resp.issues.into_iter().map(JiraIssue::from).collect())
     }
