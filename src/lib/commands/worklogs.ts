@@ -23,12 +23,14 @@ export async function createWorklog(
 
 export async function updateWorklog(
   id: number,
+  issueKey?: string,
   durationSeconds?: number,
   description?: string,
   startedAt?: string,
 ): Promise<Worklog> {
   return invoke("update_worklog", {
     id,
+    issueKey,
     durationSeconds,
     description,
     startedAt,

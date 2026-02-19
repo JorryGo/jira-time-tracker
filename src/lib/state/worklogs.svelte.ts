@@ -41,11 +41,12 @@ class WorklogsStore {
 
   async update(
     id: number,
+    issueKey?: string,
     durationSeconds?: number,
     description?: string,
     startedAt?: string,
   ) {
-    await cmd.updateWorklog(id, durationSeconds, description, startedAt);
+    await cmd.updateWorklog(id, issueKey, durationSeconds, description, startedAt);
     await this.refresh();
   }
 
@@ -110,7 +111,7 @@ class WorklogsStore {
     this.descTimers.set(
       id,
       window.setTimeout(() => {
-        cmd.updateWorklog(id, undefined, description, undefined);
+        cmd.updateWorklog(id, undefined, undefined, description, undefined);
         this.descTimers.delete(id);
       }, 500),
     );
@@ -121,7 +122,7 @@ class WorklogsStore {
       clearTimeout(timerId);
       const item = this.items.find((w) => w.id === id);
       if (item) {
-        cmd.updateWorklog(id, undefined, item.description, undefined);
+        cmd.updateWorklog(id, undefined, undefined, item.description, undefined);
       }
     }
     this.descTimers.clear();

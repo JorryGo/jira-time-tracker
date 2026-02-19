@@ -1,7 +1,10 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import type { Worklog } from "../lib/types/worklog";
+  import type { JiraIssue } from "../lib/types/jira";
   import { worklogsStore } from "../lib/state/worklogs.svelte";
   import { settingsStore } from "../lib/state/settings.svelte";
+  import { searchIssues } from "../lib/commands/jira";
   import { openUrl } from "@tauri-apps/plugin-opener";
 
   let {
@@ -28,12 +31,58 @@
     const d = new Date(worklog.started_at);
     return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   })());
+  // svelte-ignore state_referenced_locally
+  let issueKey = $state(worklog.issue_key);
+  // svelte-ignore state_referenced_locally
+  let issueSummary = $state(worklog.issue_summary ?? "");
+
   let saving = $state(false);
   let deleting = $state(false);
   let confirmDelete = $state(false);
   let error = $state("");
   // svelte-ignore state_referenced_locally
   const isSynced = worklog.sync_status === "synced";
+
+  // Issue search (pending/error worklogs only)
+  let searchQuery = $state("");
+  let searchResults = $state<JiraIssue[]>([]);
+  let searching = $state(false);
+  let showSearch = $state(false);
+  let searchTimeout: number | null = null;
+
+  function handleSearchInput(value: string) {
+    searchQuery = value;
+    if (searchTimeout) clearTimeout(searchTimeout);
+    if (value.length < 2) {
+      searchResults = [];
+      return;
+    }
+    searchTimeout = window.setTimeout(async () => {
+      searching = true;
+      try {
+        searchResults = await searchIssues(
+          `key = "${value}" OR summary ~ "${value}" ORDER BY updated DESC`,
+          10,
+        );
+      } catch {
+        searchResults = [];
+      } finally {
+        searching = false;
+      }
+    }, 300);
+  }
+
+  onDestroy(() => {
+    if (searchTimeout) clearTimeout(searchTimeout);
+  });
+
+  function selectIssue(issue: JiraIssue) {
+    issueKey = issue.issue_key;
+    issueSummary = issue.summary;
+    showSearch = false;
+    searchResults = [];
+    searchQuery = "";
+  }
 
   let endTime = $derived((() => {
     const start = new Date(`${date}T${time}:00`);
@@ -54,10 +103,11 @@
     error = "";
     try {
       const startedAt = new Date(`${date}T${time}:00`).toISOString();
+      const newIssueKey = issueKey !== worklog.issue_key ? issueKey : undefined;
       if (isSynced) {
         await worklogsStore.updateAndSync(worklog.id, totalSeconds, description, startedAt);
       } else {
-        await worklogsStore.update(worklog.id, totalSeconds, description, startedAt);
+        await worklogsStore.update(worklog.id, newIssueKey, totalSeconds, description, startedAt);
       }
       onClose();
     } catch (e) {
@@ -90,10 +140,43 @@
 <div class="modal-overlay" onmousedown={onClose}>
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="modal" onmousedown={(e) => e.stopPropagation()}>
-    <h3>Edit: <button class="issue-link" onclick={() => { if (settingsStore.jiraBaseUrl) openUrl(`${settingsStore.jiraBaseUrl}/browse/${worklog.issue_key}`); }}>{worklog.issue_key}</button></h3>
-
     {#if isSynced}
+      <h3>Edit: <button class="issue-link" onclick={() => { if (settingsStore.jiraBaseUrl) openUrl(`${settingsStore.jiraBaseUrl}/browse/${worklog.issue_key}`); }}>{worklog.issue_key}</button></h3>
       <div class="sync-warning">Changes will be pushed to Jira</div>
+    {:else if showSearch}
+      <h3>Edit worklog</h3>
+      <div class="field">
+        <label>Task</label>
+        <div class="search-row">
+          <input
+            type="text"
+            placeholder="Search by key or text..."
+            value={searchQuery}
+            oninput={(e) => handleSearchInput(e.currentTarget.value)}
+          />
+          <button class="btn-cancel-search" onclick={() => { showSearch = false; searchQuery = ""; searchResults = []; }}>cancel</button>
+        </div>
+        {#if searching}
+          <div class="search-hint">Searching...</div>
+        {/if}
+        {#if searchResults.length > 0}
+          <div class="search-results">
+            {#each searchResults as issue}
+              <button class="search-item" onclick={() => selectIssue(issue)}>
+                <span class="si-key">{issue.issue_key}</span>
+                <span class="si-summary">{issue.summary}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    {:else}
+      <h3>Edit worklog</h3>
+      <div class="selected-issue">
+        <button class="si-key" onclick={() => { if (settingsStore.jiraBaseUrl) openUrl(`${settingsStore.jiraBaseUrl}/browse/${issueKey}`); }}>{issueKey}</button>
+        <span class="si-summary">{issueSummary}</span>
+        <button class="btn-link" onclick={() => (showSearch = true)}>change</button>
+      </div>
     {/if}
 
     <div class="field-row">
@@ -196,7 +279,7 @@
     color: var(--accent-hover);
   }
 
-  .field { margin-bottom: 10px; }
+  .field { margin-bottom: 10px; position: relative; }
 
   .field label {
     display: block;
@@ -294,5 +377,116 @@
     font-weight: 500;
     margin-right: auto;
     align-self: center;
+  }
+
+  .search-results {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    max-height: 150px;
+    overflow-y: auto;
+    z-index: 10;
+    box-shadow: var(--shadow-lg);
+    animation: slideUp 0.15s ease;
+  }
+
+  .search-item {
+    display: flex;
+    gap: 6px;
+    padding: 7px 10px;
+    width: 100%;
+    text-align: left;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+    transition: background var(--transition-fast);
+  }
+
+  .search-item:last-child { border-bottom: none; }
+
+  .search-item:hover {
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+  }
+
+  .search-hint {
+    font-size: 11px;
+    color: var(--text-secondary);
+    padding: 4px 0;
+  }
+
+  .si-key {
+    font-weight: 600;
+    font-size: 11px;
+    color: var(--accent);
+    flex-shrink: 0;
+    padding: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    transition: color var(--transition-fast);
+  }
+
+  .si-key:hover {
+    text-decoration: underline;
+    color: var(--accent-hover);
+  }
+
+  .si-summary {
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .selected-issue {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    background: color-mix(in srgb, var(--accent) 5%, var(--bg-secondary));
+    border-radius: var(--radius-sm);
+    margin-bottom: 10px;
+    border: 1px solid color-mix(in srgb, var(--accent) 15%, transparent);
+  }
+
+  .btn-link {
+    font-size: 11px;
+    color: var(--accent);
+    margin-left: auto;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .btn-link:hover {
+    text-decoration: underline;
+  }
+
+  .search-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .search-row input {
+    flex: 1;
+  }
+
+  .btn-cancel-search {
+    background: none;
+    border: none;
+    font-size: 11px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 2px 0;
+    flex-shrink: 0;
+    transition: color var(--transition-fast);
+  }
+
+  .btn-cancel-search:hover {
+    color: var(--text);
   }
 </style>

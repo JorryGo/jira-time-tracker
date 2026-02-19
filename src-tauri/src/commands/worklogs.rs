@@ -113,6 +113,7 @@ pub async fn create_worklog(
 pub async fn update_worklog(
     state: State<'_, AppState>,
     id: i64,
+    issue_key: Option<String>,
     duration_seconds: Option<i64>,
     description: Option<String>,
     started_at: Option<String>,
@@ -144,6 +145,10 @@ pub async fn update_worklog(
     if let Some(ref sa) = started_at {
         binds.push(sa.clone());
         set_clauses.push(format!("started_at = ?{}", binds.len()));
+    }
+    if let Some(ref key) = issue_key {
+        binds.push(key.clone());
+        set_clauses.push(format!("issue_key = ?{}", binds.len()));
     }
 
     if !set_clauses.is_empty() {
