@@ -1,38 +1,91 @@
 # Jira Time Tracker
 
-A desktop app for tracking time on Jira issues. Lives in the system tray — click the icon to open a popover, log your work, and push worklogs to Jira. Runs on macOS, Windows, and Linux.
+A lightweight menubar app that makes Jira time tracking painless. Start a timer, do your work, push worklogs to Jira — all without leaving your workflow.
+
+<p>
+  <img src="screenshots/timer.png" alt="Timer running on an issue" width="400" />
+</p>
 
 ## Features
 
-- **Timer** — Start, pause, resume, and stop a timer on any Jira issue. Elapsed time shows in the menu bar.
-- **Work Logs** — Browse, create, edit, and delete worklogs. Filter by date and sync status.
-- **Push to Jira** — Push individual or all pending worklogs to Jira with one click.
-- **Dynamic Tray Icon** — Icon changes based on timer state (idle / working / paused).
-- **Search, Sort & Pin** — Filter tasks by key or summary, sort by status priority, pin important issues to the top.
-- **Report** — Generate a text report grouped by issue with total time and descriptions, copy to clipboard.
-- **Custom JQL** — Configure which issues appear via a custom JQL filter.
-- **Offline-first** — All data stored locally in SQLite; sync to Jira when ready.
+### One-click timer
 
-## Tech Stack
+Pick an issue from your list and hit play. The timer starts counting in the menu bar. Pause, resume, add a description of what you're working on. When you're done — stop the timer, and a worklog is ready to push.
 
-Tauri 2 · Svelte 5 · TypeScript · Rust · SQLite
+<p>
+  <img src="screenshots/tasks.png" alt="Task list" width="400" />
+</p>
 
-## Getting Started
+### Work log management
+
+All your worklogs in one place, organized by day. See what's pending, synced, or failed. Push a single worklog or hit **Push All** to send everything to Jira at once. Add worklogs manually when you forgot to start the timer.
+
+<p>
+  <img src="screenshots/timer.png" alt="Active timer with work logs" width="400" />
+</p>
+
+### Calendar view
+
+A visual timeline of where your time went. Week or month view, color-coded by issue. Hover over a block to see details. Click to edit — change time, description, or even the issue, right from the calendar.
+
+<p>
+  <img src="screenshots/calendar.png" alt="Calendar view" width="600" />
+</p>
+<p>
+  <img src="screenshots/calendar-edit.png" alt="Editing a worklog from the calendar" width="450" />
+</p>
+
+### Custom JQL & sorting
+
+Bring your own JQL filter to control which issues appear. Reorder status priorities so the most relevant tasks float to the top. Pin important issues so they're always within reach.
+
+<p>
+  <img src="screenshots/settings.png" alt="Settings — JQL filter and status ordering" width="400" />
+</p>
+
+### And more
+
+- **Daily report** — grouped by issue with descriptions and totals, one click to copy
+- **Offline-first** — everything stored locally in SQLite, sync to Jira when you're ready
+- **Dynamic tray icon** — see at a glance if a timer is running, paused, or idle
+- **Import from Jira** — pull existing worklogs so you have the full picture
+- **Auto-update notifications** — know when a new version is available
+- **Themes** — dark, light, or match your system
+
+## Install
+
+Download the latest release for your platform:
+
+**[GitHub Releases](https://github.com/JorryGo/jira-time-tracker/releases)**
+
+| Platform | Format |
+|---|---|
+| macOS (Apple Silicon & Intel) | `.dmg` |
+| Windows | `.exe` (NSIS installer) |
+| Linux | `.AppImage`, `.deb` |
+
+## Setup
+
+1. Open the app — it lives in your system tray (menu bar on macOS)
+2. Click the tray icon → go to **Settings**
+3. Enter your Jira base URL, email, and [API token](https://id.atlassian.com/manage-profile/security/api-tokens)
+4. Hit **Test Connection** → **Save**
+5. Your issues will load automatically based on the JQL filter
+
+## Development
 
 ### Prerequisites
 
 - [Node.js](https://nodejs.org/) 22+
 - [Rust](https://rustup.rs/) stable
-- [Tauri CLI](https://v2.tauri.app/start/prerequisites/)
+- [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
 
-### Development
+### Run
 
 ```bash
 npm install
 npm run tauri dev
 ```
-
-This starts both the Vite dev server (with hot reload) and the Tauri app.
 
 ### Build
 
@@ -40,25 +93,8 @@ This starts both the Vite dev server (with hot reload) and the Tauri app.
 npm run tauri build
 ```
 
-Produces a platform-specific bundle in `src-tauri/target/release/bundle/`.
+Output goes to `src-tauri/target/release/bundle/`.
 
-## Project Structure
+## Tech stack
 
-```
-src/                        # Frontend (Svelte 5 + TypeScript)
-├── views/                  # TasksView, WorklogsView, SettingsView
-├── components/             # TimerDisplay, TaskItem, modals
-└── lib/
-    ├── state/              # Svelte 5 rune-based stores
-    ├── commands/           # Typed wrappers for Tauri invoke()
-    └── types/              # TypeScript interfaces
-
-src-tauri/                  # Backend (Rust)
-├── src/
-│   ├── commands/           # Tauri IPC command handlers
-│   ├── jira/               # HTTP client (reqwest + Basic Auth)
-│   ├── db/                 # SQLite schema & migrations
-│   └── lib.rs              # App setup, tray, window management
-├── icons/                  # App and tray icons
-└── tauri.conf.json         # Tauri configuration
-```
+Tauri 2 · Svelte 5 · TypeScript · Rust · SQLite
