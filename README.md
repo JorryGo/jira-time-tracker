@@ -21,7 +21,7 @@ Pick an issue from your list and hit play. The timer starts counting in the menu
 All your worklogs in one place, organized by day. See what's pending, synced, or failed. Push a single worklog or hit **Push All** to send everything to Jira at once. Add worklogs manually when you forgot to start the timer.
 
 <p>
-  <img src="screenshots/timer.png" alt="Active timer with work logs" width="400" />
+  <img src="screenshots/worklogs.png" alt="Work logs view" width="400" />
 </p>
 
 ### Calendar view
