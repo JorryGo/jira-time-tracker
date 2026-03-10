@@ -3,6 +3,7 @@ use crate::jira::types::{JiraIssue, JiraUser};
 use crate::state::AppState;
 use chrono::{DateTime, Local, NaiveDate};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use tauri::State;
 
 /// Convert any date string to Jira format: "2021-01-17T12:34:00.000+0000"
@@ -35,6 +36,14 @@ pub async fn jira_test_connection(
     api_token: String,
 ) -> Result<JiraUser, String> {
     let client = JiraClient::new(state.http_client.clone(), &base_url, &email, &api_token);
+    client.get_myself().await
+}
+
+#[tauri::command]
+pub async fn jira_get_myself(
+    state: State<'_, AppState>,
+) -> Result<JiraUser, String> {
+    let client = get_client(&state)?;
     client.get_myself().await
 }
 
@@ -535,4 +544,226 @@ pub async fn jira_import_worklogs(
         issues_checked,
         warnings,
     })
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ExternalWorklog {
+    pub id: String,
+    pub issue_key: String,
+    pub issue_summary: Option<String>,
+    pub started_at: String,
+    pub duration_seconds: i64,
+    pub description: String,
+    pub author_name: String,
+}
+
+#[tauri::command]
+pub async fn jira_search_users(
+    state: State<'_, AppState>,
+    query: String,
+) -> Result<Vec<JiraUser>, String> {
+    let client = get_client(&state)?;
+    client.search_users(&query, 10).await
+}
+
+#[tauri::command]
+pub async fn jira_fetch_user_worklogs(
+    state: State<'_, AppState>,
+    account_id: String,
+    author_name: String,
+    date_from: String,
+    date_to: String,
+) -> Result<Vec<ExternalWorklog>, String> {
+    let client = get_client(&state)?;
+
+    let from = NaiveDate::parse_from_str(&date_from, "%Y-%m-%d")
+        .map_err(|e| format!("Invalid date_from '{}': {}", date_from, e))?;
+    let to = NaiveDate::parse_from_str(&date_to, "%Y-%m-%d")
+        .map_err(|e| format!("Invalid date_to '{}': {}", date_to, e))?;
+
+    // Expand by 1 day each side for timezone safety (same as import)
+    let day_before = from - chrono::Duration::days(1);
+    let day_after = to + chrono::Duration::days(1);
+
+    let jql = format!(
+        "worklogDate >= \"{}\" AND worklogDate <= \"{}\" AND worklogAuthor = \"{}\"",
+        day_before, day_after, account_id
+    );
+
+    let issues = client.search_issues(&jql, 50).await?;
+
+    let summary_map: HashMap<String, String> = issues
+        .iter()
+        .map(|i| (i.issue_key.clone(), i.summary.clone()))
+        .collect();
+
+    let issue_keys: Vec<String> = issues.into_iter().map(|i| i.issue_key).collect();
+
+    let started_after_epoch = day_before
+        .and_hms_opt(0, 0, 0)
+        .map(|dt| dt.and_utc().timestamp_millis());
+
+    use futures::stream::{self, StreamExt};
+
+    let worklog_results: Vec<_> = stream::iter(issue_keys)
+        .map(|key| {
+            let client = client.clone();
+            async move {
+                let result = client.get_worklogs(&key, started_after_epoch).await;
+                (key, result)
+            }
+        })
+        .buffer_unordered(5)
+        .collect()
+        .await;
+
+    let mut result = Vec::new();
+    for (issue_key, fetch_result) in worklog_results {
+        let response = match fetch_result {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        for entry in response.worklogs {
+            if entry.author.account_id != account_id {
+                continue;
+            }
+            let parsed = match DateTime::parse_from_str(
+                &entry.started,
+                "%Y-%m-%dT%H:%M:%S%.3f%z",
+            ) {
+                Ok(dt) => dt,
+                Err(_) => continue,
+            };
+            let local_date = parsed.with_timezone(&Local).date_naive();
+            if local_date < from || local_date > to {
+                continue;
+            }
+            let started_rfc3339 = parsed.with_timezone(&Local).to_rfc3339();
+            let description = entry
+                .comment
+                .as_ref()
+                .map(extract_adf_text)
+                .unwrap_or_default();
+            result.push(ExternalWorklog {
+                id: entry.id,
+                issue_key: issue_key.clone(),
+                issue_summary: summary_map.get(&issue_key).cloned(),
+                started_at: started_rfc3339,
+                duration_seconds: entry.time_spent_seconds,
+                description,
+                author_name: author_name.clone(),
+            });
+        }
+    }
+
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn jira_fetch_issue_worklogs(
+    state: State<'_, AppState>,
+    issue_keys: Vec<String>,
+    date_from: String,
+    date_to: String,
+) -> Result<Vec<ExternalWorklog>, String> {
+    if issue_keys.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Validate issue keys to prevent JQL injection
+    for key in &issue_keys {
+        let valid = key.contains('-') && {
+            let parts: Vec<&str> = key.splitn(2, '-').collect();
+            parts.len() == 2
+                && !parts[0].is_empty()
+                && parts[0].chars().all(|c| c.is_ascii_alphanumeric())
+                && !parts[1].is_empty()
+                && parts[1].chars().all(|c| c.is_ascii_digit())
+        };
+        if !valid {
+            return Err(format!("Invalid issue key: {}", key));
+        }
+    }
+
+    let client = get_client(&state)?;
+
+    let from = NaiveDate::parse_from_str(&date_from, "%Y-%m-%d")
+        .map_err(|e| format!("Invalid date_from '{}': {}", date_from, e))?;
+    let to = NaiveDate::parse_from_str(&date_to, "%Y-%m-%d")
+        .map_err(|e| format!("Invalid date_to '{}': {}", date_to, e))?;
+
+    // Fetch issue summaries
+    let keys_str = issue_keys
+        .iter()
+        .map(|k| format!("\"{}\"", k))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let jql = format!("key in ({})", keys_str);
+    let issues = client.search_issues(&jql, issue_keys.len() as u32).await?;
+
+    let summary_map: HashMap<String, String> = issues
+        .iter()
+        .map(|i| (i.issue_key.clone(), i.summary.clone()))
+        .collect();
+
+    let day_before = from - chrono::Duration::days(1);
+    let started_after_epoch = day_before
+        .and_hms_opt(0, 0, 0)
+        .map(|dt| dt.and_utc().timestamp_millis());
+
+    use futures::stream::{self, StreamExt};
+
+    let worklog_results: Vec<_> = stream::iter(issue_keys.clone())
+        .map(|key| {
+            let client = client.clone();
+            async move {
+                let result = client.get_worklogs(&key, started_after_epoch).await;
+                (key, result)
+            }
+        })
+        .buffer_unordered(5)
+        .collect()
+        .await;
+
+    let mut result = Vec::new();
+    for (issue_key, fetch_result) in worklog_results {
+        let response = match fetch_result {
+            Ok(r) => r,
+            Err(_) => continue,
+        };
+        for entry in response.worklogs {
+            let parsed = match DateTime::parse_from_str(
+                &entry.started,
+                "%Y-%m-%dT%H:%M:%S%.3f%z",
+            ) {
+                Ok(dt) => dt,
+                Err(_) => continue,
+            };
+            let local_date = parsed.with_timezone(&Local).date_naive();
+            if local_date < from || local_date > to {
+                continue;
+            }
+            let started_rfc3339 = parsed.with_timezone(&Local).to_rfc3339();
+            let description = entry
+                .comment
+                .as_ref()
+                .map(extract_adf_text)
+                .unwrap_or_default();
+            let author_name = entry
+                .author
+                .display_name
+                .unwrap_or_else(|| "Unknown".to_string());
+            result.push(ExternalWorklog {
+                id: entry.id,
+                issue_key: issue_key.clone(),
+                issue_summary: summary_map.get(&issue_key).cloned(),
+                started_at: started_rfc3339,
+                duration_seconds: entry.time_spent_seconds,
+                description,
+                author_name,
+            });
+        }
+    }
+
+    Ok(result)
 }

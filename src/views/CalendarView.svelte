@@ -5,8 +5,21 @@
   import { settingsStore } from "../lib/state/settings.svelte";
   import WorklogEditModal from "../components/WorklogEditModal.svelte";
   import AddWorklogModal from "../components/AddWorklogModal.svelte";
-  import { importWorklogs, pushAllPending } from "../lib/commands/jira";
-  import type { Worklog, WorklogFilter, ImportSummary, PushSummary } from "../lib/types/worklog";
+  import { importWorklogs, pushAllPending, searchUsers, fetchUserWorklogs, fetchIssueWorklogs, searchIssues } from "../lib/commands/jira";
+  import type { Worklog, ExternalWorklog, WorklogFilter, ImportSummary, PushSummary } from "../lib/types/worklog";
+  import type { JiraUser, JiraIssue } from "../lib/types/jira";
+
+  interface CalendarBlock {
+    uid: string;
+    issue_key: string;
+    issue_summary: string | null;
+    started_at: string;
+    duration_seconds: number;
+    description: string;
+    external: boolean;
+    localWorklog?: Worklog;
+    externalWorklog?: ExternalWorklog;
+  }
 
   function toLocalDateStr(date: Date): string {
     const y = date.getFullYear();
@@ -58,10 +71,26 @@
   let statusFilter = $state("all");
   let worklogs = $state<Worklog[]>([]);
   let loading = $state(false);
-  let hoveredWorklog = $state<Worklog | null>(null);
+  // User mode: "me" | "all" | "user"
+  let userMode = $state<"me" | "all" | "user">("me");
+  let showUserModeDropdown = $state(false);
+  let showUserSearch = $state(false);
+  let userSearchQuery = $state("");
+  let userSearchResults = $state<JiraUser[]>([]);
+  let userSearching = $state(false);
+  let showUserDropdown = $state(false);
+  let userSearchTimeout: ReturnType<typeof setTimeout> | undefined;
+  let selectedUser = $state<JiraUser | null>(null);
+  let externalWorklogs = $state<ExternalWorklog[]>([]);
+  let externalLoading = $state(false);
+  let externalError = $state("");
+  let hoveredWorklog = $state<CalendarBlock | null>(null);
   let tooltipPos = $state({ x: 0, y: 0 });
   let issueSearchQuery = $state("");
   let showIssueDropdown = $state(false);
+  let jiraIssueResults = $state<JiraIssue[]>([]);
+  let issueSearchTimeout: ReturnType<typeof setTimeout> | undefined;
+  let issueSummaryCache = $state<Map<string, string>>(new Map());
   let error = $state("");
   let syncing = $state(false);
   let pushing = $state(false);
@@ -70,16 +99,7 @@
   const todayStr = toLocalDateStr(new Date());
 
   // Derived
-  let availableIssues = $derived(
-    [...new Set(worklogs.map(w => w.issue_key))].sort()
-  );
-
-  let filteredIssueOptions = $derived(
-    availableIssues.filter(k =>
-      !issueFilter.includes(k) &&
-      k.toLowerCase().includes(issueSearchQuery.toLowerCase())
-    )
-  );
+  let viewingExternal = $derived(userMode !== "me");
 
   let filteredWorklogs = $derived(
     worklogs.filter(w => {
@@ -89,6 +109,79 @@
     })
   );
 
+  let filteredExternalWorklogs = $derived(
+    externalWorklogs.filter(w => {
+      if (issueFilter.length > 0 && !issueFilter.includes(w.issue_key)) return false;
+      return true;
+    })
+  );
+
+  let activeWorklogs = $derived(viewingExternal ? filteredExternalWorklogs : filteredWorklogs);
+
+  let issueSummaryMap = $derived.by(() => {
+    const map = new Map<string, string>();
+    for (const w of worklogs) {
+      if (w.issue_summary && !map.has(w.issue_key)) map.set(w.issue_key, w.issue_summary);
+    }
+    for (const w of externalWorklogs) {
+      if (w.issue_summary && !map.has(w.issue_key)) map.set(w.issue_key, w.issue_summary);
+    }
+    for (const [k, v] of issueSummaryCache) {
+      if (!map.has(k)) map.set(k, v);
+    }
+    return map;
+  });
+
+  let availableIssues = $derived(
+    [...new Set((viewingExternal ? externalWorklogs : worklogs).map(w => w.issue_key))].sort()
+  );
+
+  let filteredIssueOptions = $derived(
+    availableIssues.filter(k =>
+      !issueFilter.includes(k) &&
+      k.toLowerCase().includes(issueSearchQuery.toLowerCase())
+    )
+  );
+
+  let jiraIssueOptionsFiltered = $derived(
+    jiraIssueResults.filter(i =>
+      !issueFilter.includes(i.issue_key) &&
+      !availableIssues.includes(i.issue_key)
+    )
+  );
+
+  let calendarBlocks = $derived.by(() => {
+    const result: CalendarBlock[] = [];
+    if (viewingExternal) {
+      for (const wl of filteredExternalWorklogs) {
+        result.push({
+          uid: `ext-${wl.id}`,
+          issue_key: wl.issue_key,
+          issue_summary: wl.issue_summary,
+          started_at: wl.started_at,
+          duration_seconds: wl.duration_seconds,
+          description: wl.description,
+          external: true,
+          externalWorklog: wl,
+        });
+      }
+    } else {
+      for (const wl of filteredWorklogs) {
+        result.push({
+          uid: `local-${wl.id}`,
+          issue_key: wl.issue_key,
+          issue_summary: wl.issue_summary,
+          started_at: wl.started_at,
+          duration_seconds: wl.duration_seconds,
+          description: wl.description,
+          external: false,
+          localWorklog: wl,
+        });
+      }
+    }
+    return result;
+  });
+
   let pendingCount = $derived(
     worklogs.filter(w => w.sync_status === "pending").length
   );
@@ -96,22 +189,22 @@
   let days = $derived(getDaysInRange(startDate, endDate));
 
   let worklogsByDay = $derived.by(() => {
-    const map = new Map<string, Worklog[]>();
+    const map = new Map<string, CalendarBlock[]>();
     for (const day of days) map.set(day, []);
-    for (const wl of filteredWorklogs) {
-      const d = new Date(wl.started_at);
+    for (const block of calendarBlocks) {
+      const d = new Date(block.started_at);
       const dayStr = toLocalDateStr(d);
       const list = map.get(dayStr);
-      if (list) list.push(wl);
+      if (list) list.push(block);
     }
     return map;
   });
 
   let timeRange = $derived.by(() => {
     let min = 9, max = 19;
-    for (const wl of filteredWorklogs) {
-      const start = new Date(wl.started_at);
-      const end = new Date(start.getTime() + wl.duration_seconds * 1000);
+    for (const block of calendarBlocks) {
+      const start = new Date(block.started_at);
+      const end = new Date(start.getTime() + block.duration_seconds * 1000);
       const startH = start.getHours() + start.getMinutes() / 60;
       // If worklog crosses midnight, clamp end to 24 (end of day)
       const crossesMidnight = toLocalDateStr(end) !== toLocalDateStr(start);
@@ -139,33 +232,33 @@
   }
 
   // Lane assignment for overlapping worklogs
-  function assignLanes(wls: Worklog[]): { lanes: Map<number, number>; laneCount: number } {
-    const sorted = [...wls].sort((a, b) => new Date(a.started_at).getTime() - new Date(b.started_at).getTime());
-    const lanes = new Map<number, number>();
+  function assignLanes(blocks: CalendarBlock[]): { lanes: Map<string, number>; laneCount: number } {
+    const sorted = [...blocks].sort((a, b) => new Date(a.started_at).getTime() - new Date(b.started_at).getTime());
+    const lanes = new Map<string, number>();
     const laneEnds: number[] = []; // end timestamp per lane
-    for (const wl of sorted) {
-      const start = new Date(wl.started_at).getTime();
+    for (const block of sorted) {
+      const start = new Date(block.started_at).getTime();
       let placed = false;
       for (let i = 0; i < laneEnds.length; i++) {
         if (Math.floor(start / 60_000) >= Math.floor(laneEnds[i] / 60_000)) {
-          lanes.set(wl.id, i);
-          laneEnds[i] = start + wl.duration_seconds * 1000;
+          lanes.set(block.uid, i);
+          laneEnds[i] = start + block.duration_seconds * 1000;
           placed = true;
           break;
         }
       }
       if (!placed) {
-        lanes.set(wl.id, laneEnds.length);
-        laneEnds.push(start + wl.duration_seconds * 1000);
+        lanes.set(block.uid, laneEnds.length);
+        laneEnds.push(start + block.duration_seconds * 1000);
       }
     }
     return { lanes, laneCount: Math.max(laneEnds.length, 1) };
   }
 
   let worklogLanes = $derived.by(() => {
-    const result = new Map<string, { lanes: Map<number, number>; laneCount: number }>();
-    for (const [day, wls] of worklogsByDay) {
-      result.set(day, assignLanes(wls));
+    const result = new Map<string, { lanes: Map<string, number>; laneCount: number }>();
+    for (const [day, blocks] of worklogsByDay) {
+      result.set(day, assignLanes(blocks));
     }
     return result;
   });
@@ -183,16 +276,16 @@
   const LANE_GAP = 4;
   const LANE_PAD = 6;
 
-  function blockStyle(wl: Worklog, lane: number, laneCount: number): string {
-    const start = new Date(wl.started_at);
+  function blockStyle(block: CalendarBlock, lane: number, laneCount: number): string {
+    const start = new Date(block.started_at);
     const startMinutes = (start.getHours() - timeRange.startHour) * 60 + start.getMinutes();
     const totalMinutes = totalHours * 60;
     const left = (startMinutes / totalMinutes) * 100;
     // Clamp duration to end of day (midnight) if worklog crosses midnight
     const maxDurationSeconds = (24 - start.getHours()) * 3600 - start.getMinutes() * 60 - start.getSeconds();
-    const clampedDuration = Math.min(wl.duration_seconds, maxDurationSeconds);
+    const clampedDuration = Math.min(block.duration_seconds, maxDurationSeconds);
     const width = (clampedDuration / 60 / totalMinutes) * 100;
-    const hue = issueHue(wl.issue_key);
+    const hue = issueHue(block.issue_key);
     const top = LANE_PAD + lane * (LANE_HEIGHT + LANE_GAP);
     return `left: ${left}%; width: ${Math.max(width, 0.5)}%; top: ${top}px; height: ${LANE_HEIGHT}px; --block-hue: ${hue};`;
   }
@@ -217,15 +310,15 @@
   }
 
   function dayTotalSeconds(dateStr: string): number {
-    return (worklogsByDay.get(dateStr) ?? []).reduce((s, w) => s + w.duration_seconds, 0);
+    return (worklogsByDay.get(dateStr) ?? []).reduce((s, b) => s + b.duration_seconds, 0);
   }
 
   function formatTime(d: Date): string {
     return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
   }
 
-  function endTimeDate(wl: Worklog): Date {
-    return new Date(new Date(wl.started_at).getTime() + wl.duration_seconds * 1000);
+  function endTimeDate(block: CalendarBlock): Date {
+    return new Date(new Date(block.started_at).getTime() + block.duration_seconds * 1000);
   }
 
   async function loadWorklogs() {
@@ -244,6 +337,33 @@
       error = String(e);
     } finally {
       loading = false;
+    }
+    if (userMode !== "me") {
+      await loadExternalWorklogs();
+    }
+  }
+
+  async function loadExternalWorklogs() {
+    if (userMode === "user" && !selectedUser) return;
+    if (userMode === "all" && issueFilter.length === 0) return;
+    externalLoading = true;
+    externalError = "";
+    try {
+      if (userMode === "all") {
+        externalWorklogs = await fetchIssueWorklogs(issueFilter, startDate, endDate);
+      } else if (userMode === "user" && selectedUser) {
+        externalWorklogs = await fetchUserWorklogs(
+          selectedUser.accountId,
+          selectedUser.displayName,
+          startDate,
+          endDate,
+        );
+      }
+    } catch (e) {
+      externalError = String(e);
+      externalWorklogs = [];
+    } finally {
+      externalLoading = false;
     }
   }
 
@@ -344,14 +464,69 @@
     await loadWorklogs();
   }
 
-  function addIssueFilter(key: string) {
+  function addIssueFilter(key: string, summary?: string) {
     issueFilter = [...issueFilter, key];
+    if (summary) {
+      issueSummaryCache = new Map([...issueSummaryCache, [key, summary]]);
+    }
     issueSearchQuery = "";
+    jiraIssueResults = [];
     showIssueDropdown = false;
+    if (userMode === "all") loadExternalWorklogs();
   }
 
   function removeIssueFilter(key: string) {
     issueFilter = issueFilter.filter(k => k !== key);
+    if (issueFilter.length === 0 && userMode === "all") {
+      userMode = "me";
+      externalWorklogs = [];
+    } else if (userMode === "all") {
+      loadExternalWorklogs();
+    }
+  }
+
+  function handleIssueSearchInput() {
+    if (issueSearchTimeout) clearTimeout(issueSearchTimeout);
+    const q = issueSearchQuery.trim();
+    if (!q || q.length < 2) {
+      jiraIssueResults = [];
+      return;
+    }
+    // Search Jira only for issue-key-like patterns (e.g. PROJ-123 or PROJ-)
+    if (/^[A-Za-z]{2,}-\d*$/.test(q)) {
+      issueSearchTimeout = setTimeout(async () => {
+        try {
+          const upper = q.toUpperCase();
+          const jql = /^[A-Za-z]+-\d+$/.test(q)
+            ? `key = "${upper}"`
+            : `key >= "${upper}0" AND key <= "${upper}9999" ORDER BY key ASC`;
+          jiraIssueResults = await searchIssues(jql, 5);
+        } catch {
+          jiraIssueResults = [];
+        }
+      }, 400);
+    } else {
+      jiraIssueResults = [];
+    }
+  }
+
+  async function setUserMode(mode: "me" | "all" | "user") {
+    showUserModeDropdown = false;
+    showUserSearch = false;
+    if (mode === userMode) return;
+    userMode = mode;
+    externalWorklogs = [];
+    externalError = "";
+    if (mode === "me") {
+      selectedUser = null;
+    } else if (mode === "all") {
+      selectedUser = null;
+      if (issueFilter.length > 0) {
+        await loadExternalWorklogs();
+      }
+    } else if (mode === "user") {
+      showUserSearch = true;
+    }
   }
 
   function clampTooltip(x: number, y: number): { x: number; y: number } {
@@ -368,8 +543,8 @@
     return { x: tx, y: ty };
   }
 
-  function handleBlockHover(wl: Worklog, e: MouseEvent) {
-    hoveredWorklog = wl;
+  function handleBlockHover(block: CalendarBlock, e: MouseEvent) {
+    hoveredWorklog = block;
     tooltipPos = clampTooltip(e.clientX, e.clientY);
   }
 
@@ -386,6 +561,43 @@
     if (!syncing && !pushing) loadWorklogs();
   }
 
+  // User picker
+  function handleUserSearchInput() {
+    if (userSearchTimeout) clearTimeout(userSearchTimeout);
+    if (userSearchQuery.length < 2) {
+      userSearchResults = [];
+      return;
+    }
+    userSearchTimeout = setTimeout(async () => {
+      userSearching = true;
+      try {
+        userSearchResults = await searchUsers(userSearchQuery);
+      } catch {
+        userSearchResults = [];
+      } finally {
+        userSearching = false;
+      }
+    }, 300);
+  }
+
+  async function selectUser(user: JiraUser) {
+    selectedUser = user;
+    userMode = "user";
+    userSearchQuery = "";
+    userSearchResults = [];
+    showUserDropdown = false;
+    showUserSearch = false;
+    await loadExternalWorklogs();
+  }
+
+  function clearSelectedUser() {
+    selectedUser = null;
+    userMode = "me";
+    externalWorklogs = [];
+    externalError = "";
+    showUserSearch = false;
+  }
+
   onMount(async () => {
     await settingsStore.init();
     await loadWorklogs();
@@ -395,6 +607,8 @@
   onDestroy(() => {
     window.removeEventListener("focus", handleWindowFocus);
     if (toastTimeout) clearTimeout(toastTimeout);
+    if (userSearchTimeout) clearTimeout(userSearchTimeout);
+    if (issueSearchTimeout) clearTimeout(issueSearchTimeout);
   });
 </script>
 
@@ -407,30 +621,32 @@
       <button class="cal-btn cal-today-btn" class:cal-today-btn-active={viewMode === "week"} onclick={goThisWeek}>This Week</button>
       <button class="cal-btn cal-today-btn" class:cal-today-btn-active={viewMode === "month"} onclick={goThisMonth}>This Month</button>
       <div class="cal-nav-spacer"></div>
-      <span class="cal-sync-wrap">
-        <button
-          class="cal-btn cal-sync-btn"
-          onclick={handleSync}
-          disabled={syncing || pushing}
-          aria-label="Sync worklogs from Jira"
-        >
-          <svg class="sync-icon" class:spinning={syncing} xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21.5 2v6h-6"/>
-            <path d="M2.5 22v-6h6"/>
-            <path d="M2.5 11.5a10 10 0 0 1 17.3-5.7L21.5 8"/>
-            <path d="M21.5 12.5a10 10 0 0 1-17.3 5.7L2.5 16"/>
-          </svg>
-        </button>
-        <span class="cal-sync-tip">Sync worklogs from Jira for the displayed period. Does not push pending local worklogs.</span>
-      </span>
-      {#if pendingCount > 0}
-        <button
-          class="cal-btn cal-push-btn"
-          onclick={handlePushAll}
-          disabled={pushing || syncing}
-        >
-          {pushing ? "Pushing..." : `Push ${pendingCount} pending`}
-        </button>
+      {#if !viewingExternal}
+        <span class="cal-sync-wrap">
+          <button
+            class="cal-btn cal-sync-btn"
+            onclick={handleSync}
+            disabled={syncing || pushing}
+            aria-label="Sync worklogs from Jira"
+          >
+            <svg class="sync-icon" class:spinning={syncing} xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.5 2v6h-6"/>
+              <path d="M2.5 22v-6h6"/>
+              <path d="M2.5 11.5a10 10 0 0 1 17.3-5.7L21.5 8"/>
+              <path d="M21.5 12.5a10 10 0 0 1-17.3 5.7L2.5 16"/>
+            </svg>
+          </button>
+          <span class="cal-sync-tip">Sync worklogs from Jira for the displayed period. Does not push pending local worklogs.</span>
+        </span>
+        {#if pendingCount > 0}
+          <button
+            class="cal-btn cal-push-btn"
+            onclick={handlePushAll}
+            disabled={pushing || syncing}
+          >
+            {pushing ? "Pushing..." : `Push ${pendingCount} pending`}
+          </button>
+        {/if}
       {/if}
     </div>
     <div class="cal-filters">
@@ -438,8 +654,8 @@
         <label for="cal-issue-filter">Tasks</label>
         <div class="issue-filter-box">
           {#each issueFilter as key}
-            <span class="issue-tag" style="--tag-hue: {issueHue(key)}">
-              {key}
+            <span class="issue-tag" style="--tag-hue: {issueHue(key)}" title={issueSummaryMap.get(key) ?? ""}>
+              {key}{#if issueSummaryMap.has(key)}<span class="issue-tag-summary"> — {issueSummaryMap.get(key)}</span>{/if}
               <button class="tag-remove" onclick={() => removeIssueFilter(key)}>&times;</button>
             </span>
           {/each}
@@ -449,29 +665,118 @@
             class="issue-filter-input"
             placeholder={issueFilter.length ? "" : "Filter issues..."}
             bind:value={issueSearchQuery}
+            oninput={handleIssueSearchInput}
             onfocus={() => (showIssueDropdown = true)}
-            onblur={() => setTimeout(() => (showIssueDropdown = false), 200)}
+            onblur={() => setTimeout(() => { showIssueDropdown = false; jiraIssueResults = []; }, 200)}
           />
-          {#if showIssueDropdown && filteredIssueOptions.length > 0}
+          {#if showIssueDropdown && (filteredIssueOptions.length > 0 || jiraIssueOptionsFiltered.length > 0)}
             <div class="issue-dropdown">
               {#each filteredIssueOptions as key}
                 <button class="issue-option" onmousedown={() => addIssueFilter(key)}>
                   <span class="issue-option-dot" style="background: hsl({issueHue(key)}, 60%, 50%)"></span>
-                  {key}
+                  <span class="issue-option-key">{key}</span>
+                  {#if issueSummaryMap.has(key)}
+                    <span class="issue-option-summary">{issueSummaryMap.get(key)}</span>
+                  {/if}
                 </button>
               {/each}
+              {#if jiraIssueOptionsFiltered.length > 0}
+                {#if filteredIssueOptions.length > 0}
+                  <div class="issue-dropdown-separator">Jira</div>
+                {/if}
+                {#each jiraIssueOptionsFiltered as issue}
+                  <button class="issue-option" onmousedown={() => addIssueFilter(issue.issue_key, issue.summary)}>
+                    <span class="issue-option-dot" style="background: hsl({issueHue(issue.issue_key)}, 60%, 50%)"></span>
+                    <span class="issue-option-key">{issue.issue_key}</span>
+                    <span class="issue-option-summary">{issue.summary}</span>
+                  </button>
+                {/each}
+              {/if}
             </div>
           {/if}
         </div>
       </div>
-      <div class="cal-filter-group">
-        <label for="cal-status-filter">Status</label>
-        <select id="cal-status-filter" bind:value={statusFilter}>
-          <option value="all">All</option>
-          <option value="pending">Pending</option>
-          <option value="synced">Synced</option>
-          <option value="error">Error</option>
-        </select>
+      {#if !viewingExternal}
+        <div class="cal-filter-group">
+          <label for="cal-status-filter">Status</label>
+          <select id="cal-status-filter" bind:value={statusFilter}>
+            <option value="all">All</option>
+            <option value="pending">Pending</option>
+            <option value="synced">Synced</option>
+            <option value="error">Error</option>
+          </select>
+        </div>
+      {/if}
+      <div class="cal-filter-group filter-user">
+        <label>User</label>
+        {#if userMode === "user" && selectedUser}
+          <div class="user-selected">
+            <span class="user-name">{selectedUser.displayName}</span>
+            <button class="tag-remove" onclick={clearSelectedUser} title="Clear">&times;</button>
+            {#if externalLoading}
+              <svg class="sync-icon spinning" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21.5 2v6h-6"/><path d="M2.5 22v-6h6"/>
+                <path d="M2.5 11.5a10 10 0 0 1 17.3-5.7L21.5 8"/>
+                <path d="M21.5 12.5a10 10 0 0 1-17.3 5.7L2.5 16"/>
+              </svg>
+            {/if}
+          </div>
+        {:else}
+          <div class="user-mode-picker">
+            <button
+              class="user-mode-btn"
+              onclick={() => (showUserModeDropdown = !showUserModeDropdown)}
+              onblur={() => setTimeout(() => { showUserModeDropdown = false; }, 200)}
+            >
+              <span class="user-mode-label">
+                {#if userMode === "me"}Me{:else if userMode === "all"}All{:else}Search...{/if}
+              </span>
+              <svg class="user-mode-chevron" xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+              {#if externalLoading}
+                <svg class="sync-icon spinning" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21.5 2v6h-6"/><path d="M2.5 22v-6h6"/>
+                  <path d="M2.5 11.5a10 10 0 0 1 17.3-5.7L21.5 8"/>
+                  <path d="M21.5 12.5a10 10 0 0 1-17.3 5.7L2.5 16"/>
+                </svg>
+              {/if}
+            </button>
+            {#if showUserModeDropdown}
+              <div class="user-mode-dropdown">
+                <button class="user-mode-option" class:active={userMode === "me"} onmousedown={() => setUserMode("me")}>Me</button>
+                <button class="user-mode-option" class:active={userMode === "all"} disabled={issueFilter.length === 0} onmousedown={() => setUserMode("all")} title={issueFilter.length === 0 ? "Select tasks first" : ""}>All{#if issueFilter.length === 0} <span class="user-mode-hint">(select tasks)</span>{/if}</button>
+                <button class="user-mode-option" onmousedown={() => setUserMode("user")}>Search...</button>
+              </div>
+            {/if}
+            {#if showUserSearch}
+              <div class="user-search-box">
+                <input
+                  type="text"
+                  class="user-search-input"
+                  placeholder="Search users..."
+                  bind:value={userSearchQuery}
+                  oninput={handleUserSearchInput}
+                  onfocus={() => (showUserDropdown = true)}
+                  onblur={() => setTimeout(() => { showUserDropdown = false; if (!selectedUser && userMode === "user") { userMode = "me"; showUserSearch = false; } }, 300)}
+                />
+                {#if showUserDropdown && userSearchResults.length > 0}
+                  <div class="user-dropdown">
+                    {#each userSearchResults as user}
+                      <button class="user-option" onmousedown={() => selectUser(user)}>
+                        <span class="user-display-name">{user.displayName}</span>
+                        {#if user.emailAddress}
+                          <span class="user-email">{user.emailAddress}</span>
+                        {/if}
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {/if}
+          </div>
+        {/if}
+        {#if externalError}
+          <span class="external-error" title={externalError}>Error</span>
+        {/if}
       </div>
       <div class="cal-filter-group">
         <label for="cal-date-from">From</label>
@@ -516,20 +821,21 @@
         </div>
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="cal-track" style="min-height: {trackHeight(dayLanes.laneCount)}px" onclick={(e) => { if (e.target === e.currentTarget) handleTrackClick(day, e); }}>
+        <div class="cal-track" class:cal-track-readonly={viewingExternal} style="min-height: {trackHeight(dayLanes.laneCount)}px" onclick={(e) => { if (!viewingExternal && e.target === e.currentTarget) handleTrackClick(day, e); }}>
           {#each Array(totalHours + 1) as _, i}
             <div class="grid-line" style="left: {(i / totalHours) * 100}%"></div>
           {/each}
-          {#each dayWls as wl}
+          {#each dayWls as block}
             <button
               class="wl-block"
-              style={blockStyle(wl, dayLanes.lanes.get(wl.id) ?? 0, dayLanes.laneCount)}
-              onmouseenter={(e) => handleBlockHover(wl, e)}
+              class:wl-block-external={block.external}
+              style={blockStyle(block, dayLanes.lanes.get(block.uid) ?? 0, dayLanes.laneCount)}
+              onmouseenter={(e) => handleBlockHover(block, e)}
               onmousemove={(e) => { tooltipPos = clampTooltip(e.clientX, e.clientY); }}
               onmouseleave={handleBlockLeave}
-              onclick={() => { editingWorklog = wl; }}
+              onclick={() => { if (!block.external && block.localWorklog) editingWorklog = block.localWorklog; }}
             >
-              <span class="block-key">{wl.issue_key}</span>{#if wl.issue_summary}<span class="block-summary">{wl.issue_summary}</span>{/if}
+              <span class="block-key">{block.issue_key}</span>{#if block.issue_summary}<span class="block-summary">{block.issue_summary}</span>{/if}
             </button>
           {/each}
         </div>
@@ -549,6 +855,9 @@
       </div>
       {#if hoveredWorklog.issue_summary}
         <div class="tt-summary">{hoveredWorklog.issue_summary}</div>
+      {/if}
+      {#if hoveredWorklog.external && hoveredWorklog.externalWorklog}
+        <div class="tt-author">{hoveredWorklog.externalWorklog.author_name}</div>
       {/if}
       <div class="tt-time">
         {formatTime(new Date(hoveredWorklog.started_at))} &ndash; {formatTime(endTimeDate(hoveredWorklog))}
@@ -787,12 +1096,12 @@
     text-align: left;
     padding: 6px 10px;
     font-size: 11px;
-    font-weight: 600;
     color: var(--text);
     background: none;
     border: none;
     cursor: pointer;
     transition: background var(--transition-fast);
+    overflow: hidden;
   }
 
   .issue-option:hover {
@@ -804,6 +1113,40 @@
     height: 8px;
     border-radius: 50%;
     flex-shrink: 0;
+  }
+
+  .issue-option-key {
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  .issue-option-summary {
+    font-weight: 400;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .issue-tag-summary {
+    font-weight: 400;
+    opacity: 0.7;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 120px;
+    display: inline-block;
+    vertical-align: bottom;
+  }
+
+  .issue-dropdown-separator {
+    padding: 4px 10px 2px;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    border-top: 1px solid var(--border);
   }
 
   /* Timeline */
@@ -1102,6 +1445,205 @@
     flex-shrink: 0;
     font-weight: 500;
     animation: slideDown 0.2s ease;
+  }
+
+  /* External worklog blocks */
+  .wl-block-external {
+    cursor: default;
+  }
+
+  .wl-block-external:hover {
+    transform: none;
+    cursor: default;
+  }
+
+  /* User picker */
+  .filter-user {
+    min-width: 160px;
+  }
+
+  .user-mode-picker {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .user-mode-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    height: 26px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    color: var(--text);
+    cursor: pointer;
+    min-width: 80px;
+    transition: border-color var(--transition-fast);
+  }
+
+  .user-mode-btn:hover {
+    border-color: var(--accent);
+  }
+
+  .user-mode-label {
+    flex: 1;
+    text-align: left;
+  }
+
+  .user-mode-chevron {
+    flex-shrink: 0;
+    opacity: 0.5;
+  }
+
+  .user-mode-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 2px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    z-index: 20;
+    box-shadow: var(--shadow-lg);
+    animation: slideUp 0.15s ease;
+    min-width: 120px;
+    overflow: hidden;
+  }
+
+  .user-mode-option {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 6px 10px;
+    font-size: 11px;
+    color: var(--text);
+    background: none;
+    border: none;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+  }
+
+  .user-mode-option:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+  }
+
+  .user-mode-option.active {
+    font-weight: 600;
+    color: var(--accent);
+  }
+
+  .user-mode-option:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .user-mode-hint {
+    font-size: 10px;
+    opacity: 0.6;
+  }
+
+  .user-selected {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    background: color-mix(in srgb, var(--accent) 12%, transparent);
+    color: var(--accent);
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+    height: 26px;
+  }
+
+  .user-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 140px;
+  }
+
+  .user-search-box {
+    position: relative;
+  }
+
+  .user-search-input {
+    padding: 3px 8px;
+    font-size: 11px;
+    height: 26px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    color: var(--text);
+    width: 100%;
+    min-width: 120px;
+  }
+
+  .user-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 2px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 20;
+    box-shadow: var(--shadow-lg);
+    animation: slideUp 0.15s ease;
+    min-width: 220px;
+  }
+
+  .user-option {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    width: 100%;
+    text-align: left;
+    padding: 6px 10px;
+    font-size: 11px;
+    color: var(--text);
+    background: none;
+    border: none;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+  }
+
+  .user-option:hover {
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
+  }
+
+  .user-display-name {
+    font-weight: 600;
+  }
+
+  .user-email {
+    font-size: 10px;
+    color: var(--text-secondary);
+  }
+
+  .external-error {
+    font-size: 10px;
+    color: var(--danger);
+    font-weight: 500;
+  }
+
+  .cal-track-readonly {
+    cursor: default;
+  }
+
+  /* Tooltip author */
+  .tt-author {
+    font-size: 10px;
+    color: var(--text-secondary);
+    font-style: italic;
+    margin-bottom: 2px;
   }
 
   /* Loading */

@@ -201,6 +201,27 @@ impl JiraClient {
         Ok(())
     }
 
+    pub async fn search_users(
+        &self,
+        query: &str,
+        max_results: u32,
+    ) -> Result<Vec<JiraUser>, String> {
+        let url = format!("{}/rest/api/3/user/search", self.base_url);
+        self.client
+            .get(&url)
+            .header("Authorization", &self.auth_header)
+            .header("Accept", "application/json")
+            .query(&[("query", query), ("maxResults", &max_results.to_string())])
+            .send()
+            .await
+            .map_err(|e| format!("Request failed: {}", e))?
+            .error_for_status()
+            .map_err(|e| format!("Jira API error: {}", e))?
+            .json::<Vec<JiraUser>>()
+            .await
+            .map_err(|e| format!("Failed to parse response: {}", e))
+    }
+
     pub async fn get_worklogs(
         &self,
         issue_key: &str,

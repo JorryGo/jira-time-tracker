@@ -142,7 +142,7 @@
       if (!first) lines.push("");
       first = false;
       const header = group.summary ? `${key} - ${group.summary}` : key;
-      lines.push(`${header} (${formatDurationShort(group.totalSeconds)})`);
+      lines.push(header);
       const descs = group.descriptions.filter(d => d.text);
       for (const d of descs) {
         lines.push(`  - ${d.text}`);

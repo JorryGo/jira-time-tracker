@@ -12,6 +12,16 @@ export interface Worklog {
   issue_summary: string | null;
 }
 
+export interface ExternalWorklog {
+  id: string;
+  issue_key: string;
+  issue_summary: string | null;
+  started_at: string;
+  duration_seconds: number;
+  description: string;
+  author_name: string;
+}
+
 export interface WorklogFilter {
   issue_key?: string;
   sync_status?: string;

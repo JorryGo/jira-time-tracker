@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { JiraIssue, JiraUser } from "../types/jira";
-import type { PushSummary, ImportSummary } from "../types/worklog";
+import type { PushSummary, ImportSummary, ExternalWorklog } from "../types/worklog";
 
 export async function testConnection(
   baseUrl: string,
@@ -49,4 +49,38 @@ export async function deleteJiraWorklog(worklogId: number): Promise<void> {
 
 export async function importWorklogs(date: string): Promise<ImportSummary> {
   return invoke("jira_import_worklogs", { date });
+}
+
+export async function getMyself(): Promise<JiraUser> {
+  return invoke("jira_get_myself");
+}
+
+export async function searchUsers(query: string): Promise<JiraUser[]> {
+  return invoke("jira_search_users", { query });
+}
+
+export async function fetchUserWorklogs(
+  accountId: string,
+  authorName: string,
+  dateFrom: string,
+  dateTo: string,
+): Promise<ExternalWorklog[]> {
+  return invoke("jira_fetch_user_worklogs", {
+    accountId,
+    authorName,
+    dateFrom,
+    dateTo,
+  });
+}
+
+export async function fetchIssueWorklogs(
+  issueKeys: string[],
+  dateFrom: string,
+  dateTo: string,
+): Promise<ExternalWorklog[]> {
+  return invoke("jira_fetch_issue_worklogs", {
+    issueKeys,
+    dateFrom,
+    dateTo,
+  });
 }

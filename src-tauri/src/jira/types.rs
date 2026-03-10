@@ -90,4 +90,6 @@ pub struct JiraWorklogEntry {
 pub struct JiraWorklogAuthor {
     #[serde(rename = "accountId")]
     pub account_id: String,
+    #[serde(rename = "displayName", default)]
+    pub display_name: Option<String>,
 }
